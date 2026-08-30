@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" role="img" aria-label="Deserto">
+  <rect width="1080" height="1080" rx="236" fill="#15130F"/>
+  <g transform="translate(540 540) scale(1.16) translate(-541 -540)">
+    <path fill="#E8A24A" d="M620 245 L727 287 L518 712 L415 712 Z"/>
+    <circle cx="540" cy="520" r="124" fill="none" stroke="#E8A24A" stroke-width="102"/>
+    <circle cx="540" cy="520" r="73" fill="#15130F"/>
+    <path fill="#B87A2B" d="M400 737 L716 737 L716 836 L354 836 Z"/>
+  </g>
+</svg>
