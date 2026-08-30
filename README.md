@@ -7,7 +7,7 @@ Site estático: um `index.html`, sem build, sem servidor, sem conta.
 
 - **Semana de preparação** — enquanto o desafio não começa, a tela inicial vira um painel azul com os 5 passos de preparação e a contagem regressiva.
 - **Hoje** — marca os hábitos do dia, escreve o diário, gera o card do story e copia o resumo pro grupo.
-- **Mapa** — a grade inteira do desafio (hábitos × dias). Dá para corrigir dias passados.
+- **Mapa** — a grade inteira do desafio (hábitos × dias). Dá para corrigir dias passados. Abaixo da grade, o gráfico de evolução mostra quantos hábitos você cumpriu em cada dia, com a média móvel de 7 dias.
 - **Metas** — metas por marco (1 mês, 2 meses, 3 meses ou o dia final, conforme a duração).
 - **Testes** — Yo-Yo, CMJ, SJ, teste técnico, peso e o que mais vocês medirem. Cada avaliação é de número (com base, variação e minigráfico) ou de texto (passou / não passou).
 - **Ajustes** — nome, data de início, duração, hábitos, exportar/importar, zerar.
