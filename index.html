@@ -125,12 +125,11 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 
 /* ---------- frase do dia ---------- */
 .frase{position:relative;background:var(--ash);border:1px solid var(--line);border-left:3px solid var(--ember);
-  border-radius:14px;padding:16px 18px 17px;margin-bottom:14px;overflow:hidden}
+  border-radius:14px;padding:19px 20px 20px;margin-bottom:14px;overflow:hidden}
 .frase::after{content:'\201D';position:absolute;right:10px;bottom:-38px;font-family:var(--display);
   font-size:120px;color:rgba(232,162,74,.09);line-height:1;pointer-events:none}
-.frase .label{display:block;margin-bottom:9px}
-.frase p{margin:0;position:relative;z-index:1;font-family:var(--display);font-size:17px;line-height:1.32;
-  color:var(--sand);letter-spacing:-.01em}
+.frase p{margin:0;position:relative;z-index:1;font-family:var(--display);font-size:18.5px;line-height:1.34;
+  color:var(--sand);letter-spacing:-.01em;padding-right:44px}
 
 /* ---------- placar ---------- */
 .ptsrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px}
@@ -509,7 +508,6 @@ function viewFrase(dt){
   const f = fraseDoDia(dt);
   if (!f) return '';
   return `<div class="frase">
-    <span class="label">Frase do dia</span>
     <p>${esc(f)}</p>
   </div>`;
 }
