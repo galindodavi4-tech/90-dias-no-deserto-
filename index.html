@@ -131,9 +131,6 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 .frase .label{display:block;margin-bottom:9px}
 .frase p{margin:0;position:relative;z-index:1;font-family:var(--display);font-size:17px;line-height:1.32;
   color:var(--sand);letter-spacing:-.01em}
-.frase.azul{border-left-color:var(--night);background:var(--night-bg);border-color:var(--night-line)}
-.frase.azul .label{color:var(--night-dim)}
-.frase.azul::after{color:rgba(127,180,218,.10)}
 
 /* ---------- placar ---------- */
 .ptsrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px}
@@ -508,10 +505,10 @@ function viewAulas(){
   </div>`;
 }
 
-function viewFrase(dt, azul){
+function viewFrase(dt){
   const f = fraseDoDia(dt);
   if (!f) return '';
-  return `<div class="frase ${azul?'azul':''}">
+  return `<div class="frase">
     <span class="label">Frase do dia</span>
     <p>${esc(f)}</p>
   </div>`;
@@ -571,7 +568,7 @@ function viewHoje(){
   else if (d < hoje) aviso = '<div class="badge">Dia passado</div>';
   else aviso = '<div class="badge">Ainda vem</div>';
 
-  if (antes) return viewPrep() + viewFrase(new Date(), true) + `
+  if (antes) return viewFrase(new Date()) + viewPrep() + `
   <div class="card">
     <div class="spread" style="margin-bottom:13px">
       <span class="label">Os hábitos do desafio</span>
@@ -581,7 +578,7 @@ function viewHoje(){
     <p class="hint" style="margin:12px 0 0">Liberam no dia 1. Use esta semana para planejar como encaixar cada um na rotina. Para mudar a lista, vá em <button class="linkbtn" data-goto="ajustes">Ajustes</button>.</p>
   </div>` + viewPlacarPrep();
 
-  const topo = viewFrase(dataDoDia(d), false) + `
+  const topo = viewFrase(dataDoDia(d)) + `
   <div class="stats">
     <div class="stat"><b>${Math.max(0,Math.min(hoje,S.dias))}<span style="font-size:13px;color:var(--dust)">/${S.dias}</span></b><span>Dia</span></div>
     <div class="stat"><b>${sequencia()}</b><span>Sequência</span></div>
