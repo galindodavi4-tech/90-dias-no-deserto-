@@ -123,6 +123,26 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 .bar{height:8px;background:var(--ash2);border-radius:99px;overflow:hidden;margin:11px 0 9px}
 .bar i{display:block;height:100%;background:var(--ember);border-radius:99px}
 
+/* ---------- frase do dia ---------- */
+.frase{position:relative;background:var(--ash);border:1px solid var(--line);border-left:3px solid var(--ember);
+  border-radius:14px;padding:16px 18px 17px;margin-bottom:14px;overflow:hidden}
+.frase::after{content:'\201D';position:absolute;right:10px;bottom:-38px;font-family:var(--display);
+  font-size:120px;color:rgba(232,162,74,.09);line-height:1;pointer-events:none}
+.frase .label{display:block;margin-bottom:9px}
+.frase p{margin:0;position:relative;z-index:1;font-family:var(--display);font-size:17px;line-height:1.32;
+  color:var(--sand);letter-spacing:-.01em}
+.frase.azul{border-left-color:var(--night);background:var(--night-bg);border-color:var(--night-line)}
+.frase.azul .label{color:var(--night-dim)}
+.frase.azul::after{color:rgba(127,180,218,.10)}
+
+/* ---------- placar ---------- */
+.ptsrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px}
+.ptsrow div{background:var(--ash2);border-radius:10px;padding:11px 6px;text-align:center}
+.ptsrow b{display:block;font-family:var(--display);font-size:19px;color:var(--ember);line-height:1.1}
+.ptsrow span{display:block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dust);margin-top:5px;font-weight:600}
+.ptshoje{font-family:var(--display);font-size:26px;color:var(--ember);line-height:1}
+.ptshoje small{font-size:13px;color:var(--dust);font-family:var(--body);font-weight:600}
+
 /* ---------- habit rows ---------- */
 .hrow{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--ash);
   border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin-bottom:9px;transition:border-color .15s,background .15s}
@@ -271,6 +291,28 @@ const store = {
 
 /* ============ estado ============ */
 const uid = () => Math.random().toString(36).slice(2,9);
+const PTS_HABITO = 10;
+const FRASES = [
+  'Não existe herói sem jornada',
+  'O caminho se faz ao caminhar',
+  'Quem não se expõe não cresce',
+  'Constranger com a performance é a única solução',
+  'Trust your skills',
+  'Fracasse até o topo',
+  'A vida não foi feita para ser confortável',
+  'Você não é melhor por te elogiarem, você não é pior por te criticarem, você é o que é diante de Deus',
+  'Foco nas pequenas coisas',
+  'Errou? Próxima jogada!',
+  'O medo de sofrer é pior que o sofrimento',
+  'Controle o que está no seu controle',
+  'FIAT',
+  'A oportunidade sempre chega',
+  'Siga inabalável no seu caminho',
+  'Cumpra seu dever com intensidade',
+  'Faz o que deves, está no que fazes',
+  'Seja forte',
+  'Lidere pelo seu exemplo'
+];
 const DEFAULTS = ['Tomar banho natural','Não reclamar','Assistir aula do CFGA','Bater meta de água','Treinar','Fazer o diário','Postar checklist no story'];
 const METRICAS = [
   ['Yo-Yo test','m',1,'num'],
@@ -347,6 +389,51 @@ function alvoAulas(){ return Math.ceil(S.dias / 2); }
 
 function perfeitos(){ let n=0; for (let d=1; d<=S.dias; d++) if (diaPerfeito(d)) n++; return n; }
 
+/* ---- pontuação: cada hábito cumprido vale PTS_HABITO pontos ---- */
+const pontosDoDia = d => feitosNoDia(d) * PTS_HABITO;
+const pontosPorDia = () => S.habitos.length * PTS_HABITO;
+const pontosMaximos = () => S.dias * pontosPorDia();
+function pontosTotais(){
+  const ate = Math.min(Math.max(diaAtual(), 0), S.dias);
+  let p = 0;
+  for (let d = 1; d <= ate; d++) p += pontosDoDia(d);
+  return p;
+}
+const fmtPts = n => Number(n).toLocaleString('pt-BR');
+
+/* ---- frase do dia ----
+   As frases giram em voltas: a cada volta a ordem é reembaralhada de um jeito
+   determinístico, então o mesmo dia sempre mostra a mesma frase, mas as voltas
+   não repetem a mesma sequência. */
+const EPOCA = new Date(2020, 0, 1);
+function numeroDoDia(dt){
+  const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  return Math.round((d - EPOCA) / 86400000);
+}
+function ordemDaVolta(volta){
+  const ordem = FRASES.map((_,i) => i);
+  let seed = (volta * 9301 + 49297) % 233280;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  for (let i = ordem.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = ordem[i]; ordem[i] = ordem[j]; ordem[j] = t;
+  }
+  return ordem;
+}
+function fraseDoDia(dt){
+  const n = FRASES.length;
+  if (!n) return '';
+  const dias = numeroDoDia(dt || new Date());
+  const volta = Math.floor(dias / n), pos = ((dias % n) + n) % n;
+  const ordem = ordemDaVolta(volta);
+  /* evita repetir a mesma frase na virada de uma volta para a outra */
+  if (pos === 0 && n > 1) {
+    const anterior = ordemDaVolta(volta - 1);
+    if (ordem[0] === anterior[n-1]) { const t = ordem[0]; ordem[0] = ordem[1]; ordem[1] = t; }
+  }
+  return FRASES[ordem[pos]];
+}
+
 function marcos(){
   const out = [];
   for (let m = 30; m < S.dias; m += 30) out.push(m);
@@ -421,6 +508,59 @@ function viewAulas(){
   </div>`;
 }
 
+function viewFrase(dt, azul){
+  const f = fraseDoDia(dt);
+  if (!f) return '';
+  return `<div class="frase ${azul?'azul':''}">
+    <span class="label">Frase do dia</span>
+    <p>${esc(f)}</p>
+  </div>`;
+}
+
+function viewPlacar(){
+  const total = S.habitos.length;
+  if (!total) return '';
+  const d = diaVisto, hoje = diaAtual();
+  const noDia = pontosDoDia(d), doDia = pontosPorDia();
+  const acumulado = pontosTotais(), maximo = pontosMaximos();
+  const pct = maximo ? Math.round(acumulado / maximo * 100) : 0;
+  const passados = Math.min(Math.max(hoje, 0), S.dias);
+  const possiveis = passados * doDia;
+  return `<div class="card">
+    <div class="spread">
+      <span class="label">Placar</span>
+      <span class="hint">${PTS_HABITO} pts por hábito</span>
+    </div>
+    <div class="spread" style="margin-top:12px">
+      <span class="ptshoje">${fmtPts(noDia)} <small>de ${fmtPts(doDia)} pts no dia ${d}</small></span>
+    </div>
+    <div class="ptsrow">
+      <div><b>${fmtPts(acumulado)}</b><span>Total</span></div>
+      <div><b>${fmtPts(possiveis)}</b><span>Até aqui</span></div>
+      <div><b>${fmtPts(maximo)}</b><span>Desafio inteiro</span></div>
+    </div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <p class="hint" style="margin:0">${pct}% dos ${fmtPts(maximo)} pontos do desafio. Cada hábito cumprido vale ${PTS_HABITO} pontos — nenhum vale mais que o outro.</p>
+  </div>`;
+}
+
+function viewPlacarPrep(){
+  const total = S.habitos.length;
+  if (!total) return '';
+  return `<div class="card">
+    <div class="spread">
+      <span class="label">Placar</span>
+      <span class="hint">Abre no dia 1</span>
+    </div>
+    <div class="ptsrow">
+      <div><b>${PTS_HABITO}</b><span>Por hábito</span></div>
+      <div><b>${fmtPts(pontosPorDia())}</b><span>Por dia</span></div>
+      <div><b>${fmtPts(pontosMaximos())}</b><span>Desafio inteiro</span></div>
+    </div>
+    <p class="hint" style="margin:8px 0 0">Cada hábito cumprido vale ${PTS_HABITO} pontos. Com ${total} hábitos, um dia perfeito vale ${fmtPts(pontosPorDia())} pontos e o desafio inteiro vale ${fmtPts(pontosMaximos())}. A contagem começa no dia 1.</p>
+  </div>`;
+}
+
 function viewHoje(){
   const d = diaVisto, hoje = diaAtual();
   const antes = hoje < 1;
@@ -431,7 +571,7 @@ function viewHoje(){
   else if (d < hoje) aviso = '<div class="badge">Dia passado</div>';
   else aviso = '<div class="badge">Ainda vem</div>';
 
-  if (antes) return viewPrep() + `
+  if (antes) return viewPrep() + viewFrase(new Date(), true) + `
   <div class="card">
     <div class="spread" style="margin-bottom:13px">
       <span class="label">Os hábitos do desafio</span>
@@ -439,9 +579,9 @@ function viewHoje(){
     </div>
     ${S.habitos.map(h => `<div class="hrow lock"><span class="box"></span><span class="name">${esc(h.nome)}</span></div>`).join('')}
     <p class="hint" style="margin:12px 0 0">Liberam no dia 1. Use esta semana para planejar como encaixar cada um na rotina. Para mudar a lista, vá em <button class="linkbtn" data-goto="ajustes">Ajustes</button>.</p>
-  </div>`;
+  </div>` + viewPlacarPrep();
 
-  const topo = `
+  const topo = viewFrase(dataDoDia(d), false) + `
   <div class="stats">
     <div class="stat"><b>${Math.max(0,Math.min(hoje,S.dias))}<span style="font-size:13px;color:var(--dust)">/${S.dias}</span></b><span>Dia</span></div>
     <div class="stat"><b>${sequencia()}</b><span>Sequência</span></div>
@@ -467,6 +607,8 @@ function viewHoje(){
       </button>`).join('') || '<div class="card hint">Nenhum hábito ainda. Adicione os seus em Ajustes.</div>'}
   </div>
 
+  ${viewPlacar()}
+
   ${antes ? '' : viewAulas()}
 
   <div class="card">
@@ -477,7 +619,8 @@ function viewHoje(){
     <textarea id="nota" placeholder="Como foi o dia? O que doeu, o que evoluiu.">${esc(S.notas[d] || '')}</textarea>
   </div>
 
-  <button class="btn primary wide" id="story" style="margin-bottom:10px">Gerar card do story</button>
+  <button class="btn primary wide" id="publicar" style="margin-bottom:10px">Publicar relatório do dia</button>
+  <button class="btn wide" id="story" style="margin-bottom:10px">Gerar card do story</button>
   <button class="btn wide" id="resumo">Copiar resumo pro grupo</button>
   `;
 }
@@ -494,6 +637,7 @@ function bindHoje(v){
     salvar(); render();
   });
   v.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { tab = b.dataset.goto; render(); window.scrollTo({ top:0 }); });
+  if (q('#publicar')) q('#publicar').onclick = gerarRelatorio;
   if (q('#story')) q('#story').onclick = gerarCard;
   if (q('#resumo')) q('#resumo').onclick = copiarResumo;
 }
@@ -990,7 +1134,11 @@ function copiarResumo(){
   const linhas = S.habitos.map(h => (ck(h.id,d) ? '✅ ' : '⬜ ') + h.nome).join('\n');
   const txt = S.nome.toUpperCase() + ' — DIA ' + d + '/' + S.dias + '\n'
     + fmtCurto(dataDoDia(d)) + ' · ' + feitosNoDia(d) + '/' + S.habitos.length + '\n\n'
-    + linhas + '\n\nSequência: ' + sequencia() + ' dias perfeitos\nAproveitamento: ' + aproveitamento() + '%';
+    + linhas
+    + '\n\nPontos do dia: ' + fmtPts(pontosDoDia(d)) + '/' + fmtPts(pontosPorDia())
+    + '\nTotal: ' + fmtPts(pontosTotais()) + ' pts'
+    + '\nSequência: ' + sequencia() + ' dias perfeitos\nAproveitamento: ' + aproveitamento() + '%'
+    + '\n\n\u201C' + fraseDoDia(dataDoDia(d)) + '\u201D';
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(() => toast('Resumo copiado')).catch(() => fallbackCopy(txt));
   } else fallbackCopy(txt);
@@ -1002,10 +1150,171 @@ function fallbackCopy(txt){
   document.body.removeChild(t);
 }
 
+/* ============ imagens ============ */
+function exportarPNG(cv, arquivo, msg){
+  return new Promise(res => cv.toBlob(async blob => {
+    try {
+      const file = new File([blob], arquivo, { type:'image/png' });
+      if (navigator.canShare && navigator.canShare({ files:[file] })) {
+        try { await navigator.share({ files:[file] }); return res(); } catch(e){}
+      }
+    } catch(e){}
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = arquivo; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(msg); res();
+  }, 'image/png'));
+}
+
+/* quebra o texto em linhas que cabem em maxW */
+function quebrar(c, txt, maxW){
+  const palavras = String(txt).split(/\s+/), linhas = [];
+  let atual = '';
+  palavras.forEach(w => {
+    const teste = atual ? atual + ' ' + w : w;
+    if (c.measureText(teste).width > maxW && atual) { linhas.push(atual); atual = w; }
+    else atual = teste;
+  });
+  if (atual) linhas.push(atual);
+  return linhas;
+}
+
+/* desenha a marca do desafio (nome em duas linhas) e devolve o y final */
+function nomeEmDuasLinhas(){
+  const partes = S.nome.trim().split(/\s+/);
+  return [
+    (partes.length >= 3 ? partes.slice(0,2).join(' ') : partes[0] || '').toUpperCase(),
+    (partes.length >= 3 ? partes.slice(2).join(' ') : partes.slice(1).join(' ')).toUpperCase()
+  ];
+}
+
+/* ============ relatório do dia (imagem pro grupo) ============ */
+async function gerarRelatorio(){
+  const d = diaVisto, total = S.habitos.length;
+  const cv = document.getElementById('cv'), W = 1080, H = 1350;
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  try { await document.fonts.load('100px "Archivo Black"'); await document.fonts.load('600 30px "Barlow"'); } catch(e){}
+
+  /* fundo */
+  c.fillStyle = '#15130F'; c.fillRect(0,0,W,H);
+  const g = c.createRadialGradient(W/2, 380, 60, W/2, 480, 900);
+  g.addColorStop(0, 'rgba(232,162,74,.11)'); g.addColorStop(1, 'rgba(232,162,74,0)');
+  c.fillStyle = g; c.fillRect(0,0,W,H);
+
+  const [l1, l2] = nomeEmDuasLinhas();
+  c.textAlign = 'center';
+
+  /* marca d'água */
+  c.save(); c.beginPath(); c.rect(0,1150,W,200); c.clip();
+  c.fillStyle = 'rgba(231,223,204,.035)';
+  c.font = '230px "Archivo Black", sans-serif'; c.fillText(l2 || l1, W/2, 1340);
+  c.restore();
+
+  /* cabeçalho */
+  c.fillStyle = '#8F857A'; c.font = '600 27px "Barlow", sans-serif';
+  if ('letterSpacing' in c) c.letterSpacing = '11px';
+  c.fillText('RELATÓRIO DO DIA', W/2, 100);
+  if ('letterSpacing' in c) c.letterSpacing = '0px';
+
+  c.fillStyle = '#E8A24A';
+  let fs = 92; c.font = fs + 'px "Archivo Black", sans-serif';
+  while (c.measureText(l1).width > 900 && fs > 40) { fs -= 5; c.font = fs + 'px "Archivo Black", sans-serif'; }
+  c.fillText(l1, W/2, 190);
+  if (l2) {
+    let f2 = 56; c.font = f2 + 'px "Archivo Black", sans-serif';
+    if ('letterSpacing' in c) c.letterSpacing = '7px';
+    while (c.measureText(l2).width > 880 && f2 > 26) { f2 -= 3; c.font = f2 + 'px "Archivo Black", sans-serif'; }
+    c.fillStyle = '#E7DFCC'; c.fillText(l2, W/2, 258);
+    if ('letterSpacing' in c) c.letterSpacing = '0px';
+  }
+
+  c.fillStyle = '#8F857A'; c.font = '600 30px "Barlow", sans-serif';
+  c.fillText('DIA ' + d + ' DE ' + S.dias + '  ·  ' + fmtCurto(dataDoDia(d)), W/2, 322);
+
+  /* placar do dia */
+  const feitos = feitosNoDia(d), pts = pontosDoDia(d), possiveis = pontosPorDia();
+  c.fillStyle = '#E8A24A'; c.font = '104px "Archivo Black", sans-serif';
+  c.fillText(fmtPts(pts), W/2, 452);
+  c.fillStyle = '#E7DFCC'; c.font = '600 32px "Barlow", sans-serif';
+  c.fillText('de ' + fmtPts(possiveis) + ' pontos  ·  ' + feitos + ' de ' + total + ' hábitos', W/2, 502);
+
+  c.strokeStyle = '#3A342B'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(110, 552); c.lineTo(W-110, 552); c.stroke();
+
+  /* lista: o que foi feito e o que não foi */
+  const topo = 610, disp = 1120 - topo;
+  const altura = total ? Math.min(96, disp / total) : 0;
+  c.textAlign = 'left';
+  S.habitos.forEach((h,i) => {
+    const y = topo + i * altura, feito = ck(h.id, d);
+    const size = Math.min(56, altura * .58), bx = 118, by = y - size/2;
+    c.lineWidth = 5;
+    if (c.roundRect) { c.beginPath(); c.roundRect(bx, by, size, size, 13); } else { c.beginPath(); c.rect(bx, by, size, size); }
+    if (feito) {
+      c.fillStyle = '#E8A24A'; c.fill(); c.strokeStyle = '#E8A24A'; c.stroke();
+      c.strokeStyle = '#15130F'; c.lineWidth = 7; c.lineCap = 'round'; c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(bx + size*.24, by + size*.52);
+      c.lineTo(bx + size*.43, by + size*.72);
+      c.lineTo(bx + size*.78, by + size*.28);
+      c.stroke(); c.lineCap = 'butt';
+    } else {
+      c.strokeStyle = '#4A423A'; c.stroke();
+      c.strokeStyle = '#6E655C'; c.lineWidth = 6; c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(bx + size*.30, by + size*.30); c.lineTo(bx + size*.70, by + size*.70);
+      c.moveTo(bx + size*.70, by + size*.30); c.lineTo(bx + size*.30, by + size*.70);
+      c.stroke(); c.lineCap = 'butt';
+    }
+    let tf = Math.min(40, altura * .40);
+    c.font = tf + 'px "Archivo Black", sans-serif';
+    const nome = h.nome.toUpperCase(), maxW = W - bx - size - 34 - 130;
+    while (c.measureText(nome).width > maxW && tf > 18) { tf -= 2; c.font = tf + 'px "Archivo Black", sans-serif'; }
+    c.fillStyle = feito ? '#E8A24A' : '#6E655C';
+    c.fillText(nome, bx + size + 34, y + tf*.36);
+
+    c.font = '600 24px "Barlow", sans-serif'; c.textAlign = 'right';
+    c.fillStyle = feito ? '#8F857A' : '#4A423A';
+    c.fillText(feito ? '+' + PTS_HABITO : '0', W - 118, y + 9);
+    c.textAlign = 'left';
+  });
+
+  /* rodapé */
+  c.strokeStyle = '#3A342B'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(110, 1168); c.lineTo(W-110, 1168); c.stroke();
+
+  c.textAlign = 'center';
+  c.fillStyle = '#8F857A'; c.font = '600 26px "Barlow", sans-serif';
+  if ('letterSpacing' in c) c.letterSpacing = '3px';
+  c.fillText('SEQUÊNCIA ' + sequencia() + '   ·   APROVEITAMENTO ' + aproveitamento() + '%   ·   TOTAL ' + fmtPts(pontosTotais()) + ' PTS', W/2, 1215);
+  if ('letterSpacing' in c) c.letterSpacing = '0px';
+
+  const frase = fraseDoDia(dataDoDia(d));
+  if (frase) {
+    /* encolhe a frase até caber em duas linhas; três linhas é o limite */
+    const texto = '\u201C' + frase + '\u201D';
+    let fz = 30, linhas;
+    for (;;) {
+      c.font = fz + 'px "Archivo Black", sans-serif';
+      linhas = quebrar(c, texto, W - 240);
+      if (linhas.length <= 2 || fz <= 20) break;
+      fz -= 2;
+    }
+    linhas = linhas.slice(0,3);
+    const lh = fz * 1.3, base = 1322 - (linhas.length - 1) * lh;
+    c.fillStyle = '#E7DFCC';
+    linhas.forEach((ln,i) => c.fillText(ln, W/2, base + i*lh));
+  }
+
+  await exportarPNG(cv, 'deserto-relatorio-dia-' + d + '.png', 'Relatório salvo nos downloads');
+}
+
 /* ============ card do story ============ */
 async function gerarCard(){
-  const cv = document.getElementById('cv'), c = cv.getContext('2d');
-  const W = 1080, H = 1920, d = diaVisto;
+  const cv = document.getElementById('cv'), W = 1080, H = 1920, d = diaVisto;
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
   try { await document.fonts.load('100px "Archivo Black"'); await document.fonts.load('600 30px "Barlow"'); } catch(e){}
 
   c.fillStyle = '#15130F'; c.fillRect(0,0,W,H);
@@ -1070,18 +1379,9 @@ async function gerarCard(){
   c.fillStyle = '#E8A24A'; c.font = '58px "Archivo Black", sans-serif';
   c.fillText('DIA ' + d + ' / ' + S.dias, W/2, 1580);
   c.fillStyle = '#8F857A'; c.font = '600 34px "Barlow", sans-serif';
-  c.fillText(fmtCurto(dataDoDia(d)) + '  ·  ' + feitosNoDia(d) + '/' + S.habitos.length + ' cumpridos', W/2, 1636);
+  c.fillText(fmtCurto(dataDoDia(d)) + '  ·  ' + feitosNoDia(d) + '/' + S.habitos.length + ' cumpridos  ·  ' + fmtPts(pontosDoDia(d)) + ' pts', W/2, 1636);
 
-  cv.toBlob(async blob => {
-    const arquivo = 'deserto-dia-' + d + '.png';
-    if (navigator.canShare && navigator.canShare({ files:[new File([blob], arquivo, { type:'image/png' })] })) {
-      try { await navigator.share({ files:[new File([blob], arquivo, { type:'image/png' })] }); return; } catch(e){}
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = arquivo; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    toast('Card salvo nos downloads');
-  }, 'image/png');
+  await exportarPNG(cv, 'deserto-dia-' + d + '.png', 'Card salvo nos downloads');
 }
 
 /* ============ start ============ */

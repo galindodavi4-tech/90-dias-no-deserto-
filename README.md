@@ -6,7 +6,9 @@ Site estático: um `index.html`, sem build, sem servidor, sem conta.
 ## Como funciona
 
 - **Semana de preparação** — enquanto o desafio não começa, a tela inicial vira um painel azul com os 5 passos de preparação e a contagem regressiva.
-- **Hoje** — marca os hábitos do dia, escreve o diário, gera o card do story e copia o resumo pro grupo.
+- **Hoje** — a frase do dia, os hábitos, o placar de pontos e o diário. Três formas de compartilhar: o relatório do dia em imagem (botão **Publicar**), o card do story e o resumo em texto.
+- **Pontuação** — cada hábito cumprido vale 10 pontos. Com 7 hábitos, um dia perfeito vale 70 e o desafio de 90 dias vale 6.300. O placar mostra os pontos do dia, o total, o possível até aqui e o valor do desafio inteiro.
+- **Frase do dia** — 19 frases de motivação giram em voltas reembaralhadas: uma por dia, sempre a mesma para a mesma data, sem repetir na virada de uma volta para a outra. Aparece na tela inicial, no relatório e no resumo.
 - **Mapa** — a grade inteira do desafio (hábitos × dias). Dá para corrigir dias passados. Abaixo da grade, o gráfico de evolução mostra quantos hábitos você cumpriu em cada dia, com a média móvel de 7 dias.
 - **Metas** — metas por marco (1 mês, 2 meses, 3 meses ou o dia final, conforme a duração).
 - **Testes** — Yo-Yo, CMJ, SJ, teste técnico, peso e o que mais vocês medirem. Cada avaliação é de número (com base, variação e minigráfico) ou de texto (passou / não passou).
