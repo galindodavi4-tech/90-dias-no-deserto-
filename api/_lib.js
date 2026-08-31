@@ -25,6 +25,15 @@ export function faltaConfig(){
   return faltando;
 }
 
+/* Nomes (só os nomes, nunca os valores) das variáveis de banco que o servidor
+   está enxergando. Serve para comparar com o que a Vercel criou, em vez de
+   ficar adivinhando por que o banco não foi encontrado. */
+export function nomesDeBancoVisiveis(){
+  return Object.keys(process.env)
+    .filter(n => /KV|UPSTASH|REDIS/i.test(n))
+    .sort();
+}
+
 /* ---------- Redis ---------- */
 async function kv(cmd){
   const r = await fetch(KV_URL, {

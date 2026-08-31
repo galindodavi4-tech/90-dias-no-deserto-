@@ -1,11 +1,14 @@
 /* Manda o usuário para a tela de permissão do Google.
    Pedimos access_type=offline para receber o refresh token, que é o que permite
    o servidor continuar lendo a agenda sem ninguém logado na frente. */
-import { CLIENT_ID, REDIRECT_URI, APP_URL, faltaConfig, novoId, kvSet } from '../_lib.js';
+import { CLIENT_ID, REDIRECT_URI, APP_URL, faltaConfig, nomesDeBancoVisiveis,
+         novoId, kvSet } from '../_lib.js';
 
 export default async function handler(req, res){
   const faltando = faltaConfig();
   if (faltando.length) {
+    const vistas = nomesDeBancoVisiveis();
+    const semBanco = faltando.some(f => f.includes('banco'));
     /* sem isso o login nem começa. Melhor uma página que explica do que um erro cru. */
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(500).send(`<!doctype html><meta charset="utf-8">
@@ -19,10 +22,20 @@ a{color:#E8A24A}</style>
 <h1>Falta terminar a configuração</h1>
 <p>A conexão com o Google ainda não pode ser feita porque o servidor não recebeu:</p>
 <ul>${faltando.map(f => '<li>' + f + '</li>').join('')}</ul>
-<p>Isso se resolve no painel da Vercel, em <b>Settings → Environment Variables</b>.
-O passo a passo completo está no <code>README.md</code> do projeto, na parte
-“Ligar o Google Calendar”.</p>
-<p>Depois de salvar, publique de novo (<b>Deployments → Redeploy</b>) para as
+${semBanco ? `
+<h2>Sobre o banco</h2>
+<p>O que o servidor está enxergando de banco, agora:</p>
+${vistas.length
+  ? '<ul>' + vistas.map(n => '<li><code>' + n + '</code></li>').join('') + '</ul>'
+  : '<p><b>Nada.</b> Nenhuma informação de banco chegou aqui.</p>'}
+<p>${vistas.length
+  ? 'Os nomes acima existem, mas não são os que o app procura. Me mande esta lista que eu ajusto o código.'
+  : 'Quase sempre é uma destas duas coisas: o banco foi criado mas não foi ligado a este projeto, ou foi ligado e o site ainda não foi publicado de novo. Adicionar um banco não republica o site sozinho.'}</p>
+` : ''}
+<p>Isso se resolve no painel da Vercel, em <b>Storage</b> e em
+<b>Settings → Environment Variables</b>. O passo a passo completo está no
+<code>README.md</code> do projeto, na parte “Ligar o Google Calendar”.</p>
+<p>Depois de salvar, publique de novo (<b>Deployments → ... → Redeploy</b>) para as
 informações novas entrarem.</p>
 <p><a href="/">Voltar para o app</a></p>`);
     return;
