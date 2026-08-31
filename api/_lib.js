@@ -2,8 +2,10 @@
    Guardamos tudo no Redis (Upstash) via REST, que funciona em qualquer runtime
    serverless só com duas variáveis de ambiente. */
 
-const KV_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+/* A Upstash cria variáveis com nomes diferentes dependendo de como o banco foi
+   ligado na Vercel. Aceitamos os dois para ninguém precisar renomear nada. */
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
 
 export const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 export const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -16,7 +18,7 @@ export const JANELA_DIAS = 14;
 
 export function faltaConfig(){
   const faltando = [];
-  if (!KV_URL || !KV_TOKEN) faltando.push('KV_REST_API_URL/KV_REST_API_TOKEN');
+  if (!KV_URL || !KV_TOKEN) faltando.push('o banco (Upstash Redis) não está ligado no projeto');
   if (!CLIENT_ID) faltando.push('GOOGLE_CLIENT_ID');
   if (!CLIENT_SECRET) faltando.push('GOOGLE_CLIENT_SECRET');
   if (!APP_URL) faltando.push('APP_URL');
