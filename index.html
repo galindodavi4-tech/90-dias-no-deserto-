@@ -162,10 +162,10 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 /* ---------- aba rotina ---------- */
 .rdia{margin-bottom:12px}
 .rdia > h3{font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--dust);margin:0 0 8px;display:flex;align-items:center;gap:9px}
+  color:var(--dust);margin:0 0 8px;display:flex;align-items:baseline;gap:9px}
+.rdia > h3 small{font-family:var(--body);font-size:11px;letter-spacing:.04em;color:var(--dust);
+  font-weight:600;opacity:.8;text-transform:none}
 .rdia.hoje > h3{color:var(--ember)}
-.rdia.hoje > h3::after{content:'HOJE';font-size:9px;letter-spacing:.14em;background:var(--ember);color:#191510;
-  padding:2px 6px;border-radius:5px}
 .bloco{display:flex;align-items:center;gap:11px;background:var(--ash);border:1px solid var(--line);
   border-radius:11px;padding:10px 12px;margin-bottom:7px}
 .bloco.agorinha{border-color:var(--ember);background:#241C12}
@@ -182,6 +182,14 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 .novobloco .horas{display:flex;gap:8px;align-items:center}
 .novobloco .horas input{flex:1;min-width:0}
 .rimport{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.modal{position:fixed;inset:0;z-index:40;background:rgba(10,9,7,.8);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.modalcard{background:var(--ash);border:1px solid var(--line);border-radius:16px;padding:20px;
+  width:100%;max-width:420px;max-height:80vh;overflow-y:auto}
+.modallista{margin-top:4px}
+details summary::-webkit-details-marker{display:none}
+details summary{list-style:none;color:var(--night);text-decoration:underline}
+details[open] summary{margin-bottom:2px}
 
 /* ---------- habit rows ---------- */
 .hrow{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--ash);
@@ -387,7 +395,7 @@ function novoEstado(){
     medidas: {},
     prep: {},
     aulas: { habitoId: cfga ? cfga.id : '', alvo: 45, auto:true },
-    rotina: { blocos: [], origem: '', importadoEm: '' }
+    rotina: { blocos: [], eventos: [], google: { clientId:'', calendarId:'', calendarNome:'', sincronizadoEm:'' }, origem: '', importadoEm: '' }
   };
 }
 let S = novoEstado();
@@ -525,100 +533,190 @@ const EMOJIS = [
 ];
 const emojiDe = nome => (EMOJIS.find(e => e[0].test(nome)) || [null,'🔥'])[1];
 
-/* blocos de um dia da semana, os com horário primeiro e em ordem */
-function blocosDoDia(dia){
-  return (S.rotina.blocos || [])
-    .filter(b => b.dia === dia)
-    .slice()
-    .sort((a,b) => {
-      const ha = hm(a.ini), hb = hm(b.ini);
-      if (ha === null && hb === null) return 0;
-      if (ha === null) return 1;
-      if (hb === null) return -1;
-      return ha - hb;
-    });
-}
-/* fim efetivo de um bloco: o que foi informado, ou uma hora depois do início */
+/* fim efetivo de um item: o que foi informado, ou uma hora depois do início */
 function fimDe(b){
   const i = hm(b.ini); if (i === null) return null;
   const f = hm(b.fim);
   return (f !== null && f > i) ? f : Math.min(24*60, i + 60);
 }
+function porHora(a,b){
+  const ha = hm(a.ini), hb = hm(b.ini);
+  if (ha === null && hb === null) return 0;
+  if (ha === null) return 1;
+  if (hb === null) return -1;
+  return ha - hb;
+}
+
+/* O que acontece numa data: os eventos vindos do Google (que têm data de verdade)
+   mais os blocos semanais montados à mão para aquele dia da semana. */
+function itensDoDia(dt){
+  const iso = toISO(dt), dia = dt.getDay();
+  const evs = (S.rotina.eventos || []).filter(e => e.data === iso);
+  const bls = (S.rotina.blocos || []).filter(b => b.dia === dia);
+  return evs.concat(bls).sort(porHora);
+}
+const temRotina = () => (S.rotina.eventos || []).length > 0 || (S.rotina.blocos || []).length > 0;
 
 /* o que está acontecendo agora e o que vem depois */
 function agenda(quando){
   const t = quando || new Date();
-  const dia = t.getDay(), min = t.getHours()*60 + t.getMinutes();
-  const hoje = blocosDoDia(dia).filter(b => hm(b.ini) !== null);
+  const min = t.getHours()*60 + t.getMinutes();
+  const hoje = itensDoDia(t).filter(b => hm(b.ini) !== null);
   const atual = hoje.find(b => min >= hm(b.ini) && min < fimDe(b)) || null;
-  let proximo = hoje.find(b => hm(b.ini) > min) || null, amanha = false;
+  let proximo = hoje.find(b => hm(b.ini) > min) || null, outroDia = null;
   if (!proximo) {
     for (let i = 1; i <= 7 && !proximo; i++) {
-      const cand = blocosDoDia((dia + i) % 7).filter(b => hm(b.ini) !== null)[0];
-      if (cand) { proximo = cand; amanha = true; }
+      const d = addDays(t, i);
+      const cand = itensDoDia(d).filter(b => hm(b.ini) !== null)[0];
+      if (cand) { proximo = cand; outroDia = d; }
     }
   }
-  return { atual, proximo, amanha, min, dia };
+  return { atual, proximo, outroDia, min };
 }
 
-/* ---- importação: Google Calendar (.ics) ---- */
-function parseICS(texto){
-  /* desdobra as linhas continuadas (RFC 5545) */
-  const linhas = String(texto).replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n[ \t]/g,'').split('\n');
-  const blocos = [], DIAS_ICS = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 };
-  let ev = null;
+/* ============ Google Calendar ============
+   Tudo no navegador, sem servidor. O app pede um token de leitura ao Google
+   (Google Identity Services) e busca os eventos já expandidos e no fuso certo,
+   numa janela dos próximos dias. O token fica só na memória: ao abrir o app de
+   novo, é pedido outra vez em silêncio enquanto a sessão do Google estiver viva. */
+const GCAL_ESCOPO = 'https://www.googleapis.com/auth/calendar.readonly';
+const GCAL_DIAS = 14;              /* janela buscada, em dias */
+let gcalToken = null;              /* { valor, expira } — nunca vai para o disco */
+let gcalCliente = null;            /* token client do GIS, criado uma vez */
+let gcalSincronizando = false;
 
-  const desescapa = v => String(v).replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\').trim();
-  /* devolve {dia, hh, mm} de um DTSTART/DTEND, ou null se for evento de dia inteiro */
-  function quando(valor, params){
-    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(String(valor).trim());
-    if (!m || !m[4]) return null;                     /* dia inteiro: sem horário, não entra */
-    const [_, Y, Mo, D, H, Mi, , z] = m;
-    /* horário em UTC vira horário local; com TZID ou sem sufixo, é hora de parede */
-    const d = z ? new Date(Date.UTC(+Y, +Mo-1, +D, +H, +Mi))
-                : new Date(+Y, +Mo-1, +D, +H, +Mi);
-    return { dia: d.getDay(), hhmm: mh(d.getHours()*60 + d.getMinutes()) };
+function gcalConfig(){ return (S.rotina && S.rotina.google) || {}; }
+const gcalLigado = () => !!gcalConfig().clientId && !!gcalConfig().calendarId;
+
+/* carrega o script do Google Identity Services uma única vez */
+function carregarGIS(){
+  if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+  if (carregarGIS._p) return carregarGIS._p;
+  carregarGIS._p = new Promise((ok, falha) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true; s.defer = true;
+    s.onload = () => ok();
+    s.onerror = () => { carregarGIS._p = null; falha(new Error('sem rede')); };
+    document.head.appendChild(s);
+  });
+  return carregarGIS._p;
+}
+
+/* pede um token de acesso. silencioso = não mostra tela nenhuma se já houver
+   consentimento e sessão do Google ativa. */
+async function gcalPedirToken(silencioso){
+  if (gcalToken && gcalToken.expira > Date.now() + 60000) return gcalToken.valor;
+  const clientId = gcalConfig().clientId;
+  if (!clientId) throw new Error('sem client id');
+  await carregarGIS();
+
+  return new Promise((ok, falha) => {
+    const resolver = resp => {
+      if (resp && resp.access_token) {
+        gcalToken = { valor: resp.access_token, expira: Date.now() + (resp.expires_in || 3600) * 1000 };
+        ok(gcalToken.valor);
+      } else {
+        falha(new Error(resp && resp.error ? resp.error : 'sem token'));
+      }
+    };
+    if (!gcalCliente || gcalCliente._id !== clientId) {
+      gcalCliente = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: GCAL_ESCOPO,
+        callback: r => gcalCliente._cb && gcalCliente._cb(r),
+        error_callback: e => gcalCliente._err && gcalCliente._err(e)
+      });
+      gcalCliente._id = clientId;
+    }
+    gcalCliente._cb = resolver;
+    gcalCliente._err = e => falha(new Error((e && e.type) || 'cancelado'));
+    try { gcalCliente.requestAccessToken({ prompt: silencioso ? '' : 'consent' }); }
+    catch(e){ falha(e); }
+  });
+}
+
+async function gcalBuscar(caminho, params, silencioso){
+  const token = await gcalPedirToken(silencioso);
+  const url = new URL('https://www.googleapis.com/calendar/v3/' + caminho);
+  Object.entries(params || {}).forEach(([k,v]) => url.searchParams.set(k, v));
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401 || r.status === 403) { gcalToken = null; throw new Error('sem permissão'); }
+  if (!r.ok) throw new Error('http ' + r.status);
+  return r.json();
+}
+
+/* as agendas da conta, para o usuário escolher qual tem a rotina */
+async function gcalAgendas(){
+  const d = await gcalBuscar('users/me/calendarList', { maxResults: 100, minAccessRole: 'reader' });
+  return (d.items || []).map(c => ({ id: c.id, nome: c.summary || c.id, principal: !!c.primary }));
+}
+
+/* converte um evento da API em item da rotina. Devolve null para o que não serve. */
+function gcalParaItem(ev){
+  if (!ev || ev.status === 'cancelled') return null;
+  const ini = ev.start && ev.start.dateTime;
+  if (!ini) return null;                                  /* dia inteiro: sem horário */
+  const di = new Date(ini);
+  if (isNaN(di)) return null;
+  const df = ev.end && ev.end.dateTime ? new Date(ev.end.dateTime) : null;
+  const mesmoDia = df && toISO(df) === toISO(di);
+  return {
+    id: 'g' + (ev.id || uid()),
+    data: toISO(di),
+    ini: mh(di.getHours()*60 + di.getMinutes()),
+    fim: (df && mesmoDia) ? mh(df.getHours()*60 + df.getMinutes()) : '',
+    nome: String(ev.summary || 'Sem título').trim().slice(0,60),
+    google: true
+  };
+}
+
+/* busca a janela de eventos e guarda. silencioso = sem abrir tela de login. */
+async function gcalSincronizar(silencioso){
+  if (gcalSincronizando || !gcalLigado()) return false;
+  gcalSincronizando = true;
+  try {
+    const agora = new Date();
+    const de = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const ate = addDays(de, GCAL_DIAS);
+    let pagina = '', itens = [], voltas = 0;
+    do {
+      const d = await gcalBuscar('calendars/' + encodeURIComponent(gcalConfig().calendarId) + '/events', {
+        timeMin: de.toISOString(),
+        timeMax: ate.toISOString(),
+        singleEvents: 'true',          /* o Google expande as repetições por nós */
+        orderBy: 'startTime',
+        maxResults: '250',
+        showDeleted: 'false',
+        pageToken: pagina
+      }, silencioso);
+      itens = itens.concat(d.items || []);
+      pagina = d.nextPageToken || '';
+    } while (pagina && ++voltas < 8);
+
+    S.rotina.eventos = itens.map(gcalParaItem).filter(Boolean).slice(0, 400);
+    S.rotina.google = Object.assign({}, gcalConfig(), { sincronizadoEm: new Date().toISOString() });
+    salvar();
+    return true;
+  } finally {
+    gcalSincronizando = false;
   }
+}
 
-  linhas.forEach(linha => {
-    if (/^BEGIN:VEVENT/i.test(linha)) { ev = {}; return; }
-    if (/^END:VEVENT/i.test(linha)) {
-      if (ev && ev.nome && ev.ini) {
-        /* evento semanal com BYDAY vira um bloco por dia listado */
-        const dias = ev.byday && ev.byday.length ? ev.byday : [ev.dia];
-        dias.forEach(dia => blocos.push({ id:uid(), dia, ini:ev.ini, fim:ev.fim || '', nome:ev.nome, rec: !!ev.semanal }));
-      }
-      ev = null; return;
-    }
-    if (!ev) return;
-    const corte = linha.indexOf(':'); if (corte < 0) return;
-    const cabeca = linha.slice(0, corte), valor = linha.slice(corte + 1);
-    const nomeProp = cabeca.split(';')[0].toUpperCase();
+/* sincroniza sem incomodar: erro nenhum aparece na tela */
+async function gcalSincronizarQuieto(){
+  if (!gcalLigado()) return;
+  try {
+    const mudou = await gcalSincronizar(true);
+    if (mudou) { if (tab === 'rotina') render(); else atualizarAgora(); }
+  } catch(e){ /* sem rede ou sessão expirada: fica com o que já estava guardado */ }
+}
 
-    if (nomeProp === 'SUMMARY') ev.nome = desescapa(valor).slice(0,60);
-    else if (nomeProp === 'DTSTART') { const q = quando(valor); if (q) { ev.dia = q.dia; ev.ini = q.hhmm; } }
-    else if (nomeProp === 'DTEND')   { const q = quando(valor); if (q) ev.fim = q.hhmm; }
-    else if (nomeProp === 'RRULE') {
-      if (/FREQ=(WEEKLY|DAILY)/i.test(valor)) {
-        ev.semanal = true;
-        if (/FREQ=DAILY/i.test(valor)) ev.byday = [0,1,2,3,4,5,6];
-        const by = /BYDAY=([^;]+)/i.exec(valor);
-        if (by) {
-          const ds = by[1].split(',')
-            .map(s => DIAS_ICS[s.replace(/^[-+]?\d+/,'').trim().toUpperCase()])
-            .filter(d => d !== undefined);
-          if (ds.length) ev.byday = ds;
-        }
-      }
-    }
-  });
-  /* uma agenda exportada inteira traz muito evento avulso. Se houver eventos que
-     se repetem toda semana, são eles a rotina; os avulsos só entram quando não há
-     nenhum recorrente no arquivo. */
-  const recorrentes = blocos.filter(b => b.rec);
-  return dedup(recorrentes.length ? recorrentes : blocos).map(b => {
-    delete b.rec; return b;
-  });
+function gcalDesconectar(){
+  gcalToken = null; gcalCliente = null;
+  S.rotina.eventos = [];
+  S.rotina.google = { clientId: gcalConfig().clientId || '', calendarId: '', calendarNome: '', sincronizadoEm: '' };
+  salvar(); render(); toast('Google Calendar desconectado');
 }
 
 /* ---- importação: Trello (.json do quadro) ---- */
@@ -738,11 +836,11 @@ function viewAulas(){
 
 /* ---------- o que é agora (passo 5) ---------- */
 function corpoAgora(){
-  if (!S.rotina.blocos.length) {
+  if (!temRotina()) {
     return `<div class="quando">Rotina</div>
       <p class="vazio">Monte sua rotina na aba <button class="linkbtn" data-goto="rotina">Rotina</button> e o app passa a avisar, aqui em cima, o que é a hora de fazer.</p>`;
   }
-  const { atual, proximo, amanha, min } = agenda();
+  const { atual, proximo, outroDia, min } = agenda();
 
   if (atual) {
     const i = hm(atual.ini), f = fimDe(atual);
@@ -756,20 +854,25 @@ function corpoAgora(){
       <div class="prog"><i style="width:${Math.max(2,Math.min(100,pct))}%"></i></div>`;
   }
   if (proximo) {
-    const espera = amanha ? null : hm(proximo.ini) - min;
+    let quando;
+    if (!outroDia) quando = 'daqui a <b>' + duracaoTxt(hm(proximo.ini) - min) + '</b>';
+    else {
+      const amanha = toISO(outroDia) === toISO(addDays(new Date(), 1));
+      quando = amanha ? 'amanhã' : DIAS_SEM[outroDia.getDay()] + ', ' + fmtCurto(outroDia);
+    }
     return `<div class="quando">A seguir</div>
       <div class="evt">
         <span class="emo">${emojiDe(proximo.nome)}</span>
         <span class="nome">${esc(proximo.nome)}</span>
       </div>
-      <div class="faixa">${esc(proximo.ini)} · ${amanha ? DIAS_SEM[proximo.dia] : 'daqui a <b>' + duracaoTxt(espera) + '</b>'}</div>`;
+      <div class="faixa">${esc(proximo.ini)} · ${quando}</div>`;
   }
   return `<div class="quando">Rotina</div>
     <p class="vazio">Nada marcado com horário na sua rotina. Adicione horários na aba <button class="linkbtn" data-goto="rotina">Rotina</button>.</p>`;
 }
 
 function viewAgora(){
-  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
+  const { atual } = temRotina() ? agenda() : { atual:null };
   return `<div class="agora ${atual?'':'prox'}" id="agora">${corpoAgora()}</div>`;
 }
 
@@ -777,7 +880,7 @@ function viewAgora(){
 function atualizarAgora(){
   const el = document.getElementById('agora');
   if (!el) return;
-  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
+  const { atual } = temRotina() ? agenda() : { atual:null };
   el.className = 'agora ' + (atual ? '' : 'prox');
   el.innerHTML = corpoAgora();
   el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { tab = b.dataset.goto; render(); window.scrollTo({ top:0 }); });
@@ -1069,26 +1172,25 @@ function bindMapa(v){
 
 /* ---------- ROTINA ---------- */
 function viewRotina(){
-  const hojeSem = new Date().getDay();
-  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
-  const total = S.rotina.blocos.length;
+  const hoje = new Date();
+  const { atual } = temRotina() ? agenda() : { atual:null };
 
-  /* a semana começa no dia de hoje, para o que interessa ficar em cima */
-  const ordem = Array.from({length:7}, (_,i) => (hojeSem + i) % 7);
-  const dias = ordem.map(dia => {
-    const bs = blocosDoDia(dia);
-    if (!bs.length) return '';
-    const linhas = bs.map(b => {
+  /* os próximos 7 dias, com data de verdade */
+  const dias = Array.from({length:7}, (_,i) => addDays(hoje, i)).map((dt,i) => {
+    const itens = itensDoDia(dt);
+    if (!itens.length) return '';
+    const linhas = itens.map(b => {
       const semHora = hm(b.ini) === null;
       const f = fimDe(b);
       return `<div class="bloco ${b === atual ? 'agorinha' : ''} ${semHora ? 'semhora' : ''}">
         <span class="hora">${semHora ? '—' : esc(b.ini) + '<span>' + mh(f) + '</span>'}</span>
-        <span class="txt">${emojiDe(b.nome)} ${esc(b.nome)}</span>
-        <button class="del" data-delb="${b.id}" aria-label="Excluir bloco">×</button>
+        <span class="txt">${emojiDe(b.nome)} ${esc(b.nome)}${b.google ? '' : '<em>bloco fixo · toda ' + DIAS_SEM[b.dia].toLowerCase() + '</em>'}</span>
+        ${b.google ? '' : `<button class="del" data-delb="${b.id}" aria-label="Excluir bloco">×</button>`}
       </div>`;
     }).join('');
-    return `<section class="rdia ${dia === hojeSem ? 'hoje' : ''}">
-      <h3>${DIAS_SEM[dia]}</h3>
+    const titulo = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : DIAS_SEM[dt.getDay()];
+    return `<section class="rdia ${i===0 ? 'hoje' : ''}">
+      <h3>${titulo}<small>${DIAS_CURTO[dt.getDay()].toLowerCase()} ${fmtCurto(dt)}</small></h3>
       ${linhas}
     </section>`;
   }).join('');
@@ -1096,42 +1198,109 @@ function viewRotina(){
   const vazio = `<div class="card rvazio">
     <div class="big">◷</div>
     <p class="hint" style="margin:0 0 4px">Sua rotina ainda está vazia.</p>
-    <p class="hint" style="margin:0">Monte abaixo, bloco por bloco, ou traga pronta do Google Calendar ou do Trello.</p>
+    <p class="hint" style="margin:0">Conecte o Google Calendar abaixo, ou monte bloco por bloco aqui mesmo.</p>
   </div>`;
 
-  const fonte = S.rotina.origem
-    ? `<p class="hint" style="margin:10px 0 0">Última importação: ${S.rotina.origem === 'ics' ? 'Google Calendar' : 'Trello'}${S.rotina.importadoEm ? ' em ' + esc(S.rotina.importadoEm) : ''}.</p>`
-    : '';
-
   return `
-  ${total ? dias : vazio}
+  ${temRotina() ? dias : vazio}
+  ${viewGoogleCard()}
 
   <div class="card">
-    <span class="label">Novo bloco</span>
+    <span class="label">Bloco fixo</span>
     <div class="novobloco" style="margin-top:12px">
       <input type="text" id="bnome" placeholder="O que é? Ex.: Treino de força" maxlength="60">
-      <select id="bdia" aria-label="Dia da semana">${DIAS_SEM.map((n,i) => `<option value="${i}" ${i===hojeSem?'selected':''}>${n}</option>`).join('')}</select>
+      <select id="bdia" aria-label="Dia da semana">${DIAS_SEM.map((n,i) => `<option value="${i}" ${i===hoje.getDay()?'selected':''}>Toda ${n.toLowerCase()}</option>`).join('')}</select>
       <div class="horas">
         <input type="time" id="bini" aria-label="Hora de início">
         <span class="hint">até</span>
         <input type="time" id="bfim" aria-label="Hora de fim">
       </div>
-      <button class="btn primary wide" id="baddblock">Adicionar à rotina</button>
+      <button class="btn primary wide" id="baddblock">Adicionar</button>
     </div>
-    <p class="hint" style="margin:10px 0 0">O horário de fim é opcional — sem ele o bloco dura uma hora. Sem horário nenhum, o bloco fica no dia mas não entra no aviso da tela inicial.</p>
+    <p class="hint" style="margin:10px 0 0">Bloco fixo se repete toda semana no mesmo dia e some só quando você apaga. Serve para o que não está em agenda nenhuma. O horário de fim é opcional — sem ele o bloco dura uma hora.</p>
   </div>
 
   <div class="card">
-    <span class="label">Trazer rotina pronta</span>
-    <div class="rimport">
-      <button class="btn" data-imp="ics">Google Calendar</button>
-      <button class="btn" data-imp="trello">Trello</button>
+    <span class="label">Trello</span>
+    <button class="btn wide" data-imp="trello" style="margin-top:12px">Importar quadro do Trello</button>
+    <p class="hint" style="margin:12px 0 0">Por enquanto o Trello ainda é por arquivo: abra o quadro → menu → Mais → Imprimir e exportar → Exportar como JSON. Funciona com listas nomeadas por dia da semana (Segunda, Terça...) e cards no formato <code>18:00 Treinar</code>. Os cards entram como blocos fixos.</p>
+    ${S.rotina.origem === 'trello' && S.rotina.importadoEm ? `<p class="hint" style="margin:8px 0 0">Última importação em ${esc(S.rotina.importadoEm)}.</p>` : ''}
+  </div>
+
+  ${S.rotina.blocos.length ? '<button class="btn danger wide" id="brotzera">Apagar os blocos fixos</button>' : ''}`;
+}
+
+/* card de conexão com o Google Calendar */
+function viewGoogleCard(){
+  const g = gcalConfig();
+
+  if (!gcalLigado()) {
+    return `<div class="card">
+      <span class="label">Google Calendar</span>
+      <p class="hint" style="margin:11px 0 0">O app lê sua agenda direto do Google — só leitura — e mantém a rotina em dia sozinho. Nada sai do seu aparelho.</p>
+      <input type="text" id="gclient" placeholder="Cole aqui o Client ID do Google" value="${esc(g.clientId || '')}" style="margin-top:12px" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="btn primary wide" id="gconectar" style="margin-top:8px">Conectar com o Google</button>
+      <details style="margin-top:12px">
+        <summary class="hint" style="cursor:pointer">Como pegar o Client ID (uma vez só)</summary>
+        <ol class="hint" style="margin:9px 0 0;padding-left:20px;line-height:1.65">
+          <li>Abra <code>console.cloud.google.com</code> e crie um projeto.</li>
+          <li>Em <b>APIs e serviços → Biblioteca</b>, ative a <b>Google Calendar API</b>.</li>
+          <li>Em <b>Tela de permissão OAuth</b>, escolha <b>Externo</b>, preencha o nome e adicione seu e-mail em <b>Usuários de teste</b>.</li>
+          <li>Em <b>Credenciais → Criar credenciais → ID do cliente OAuth</b>, tipo <b>Aplicativo da Web</b>.</li>
+          <li>Em <b>Origens JavaScript autorizadas</b>, coloque <code>${esc(location.origin)}</code>.</li>
+          <li>Copie o Client ID e cole aqui em cima.</li>
+        </ol>
+      </details>
+    </div>`;
+  }
+
+  const quando = g.sincronizadoEm ? new Date(g.sincronizadoEm) : null;
+  const quandoTxt = quando && !isNaN(quando)
+    ? quando.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+    : '—';
+  return `<div class="card">
+    <div class="spread">
+      <span class="label">Google Calendar</span>
+      <span class="hint" style="color:var(--ember)">● conectado</span>
     </div>
-    <p class="hint" style="margin:12px 0 0"><b style="color:var(--sand)">Google Calendar:</b> no computador, abra Configurações → Importar e exportar → Exportar. Descompacte o arquivo e escolha aqui o <code>.ics</code> da agenda que tem sua rotina.</p>
-    <p class="hint" style="margin:8px 0 0"><b style="color:var(--sand)">Trello:</b> abra o quadro → menu → Mais → Imprimir e exportar → Exportar como JSON. Salve e escolha o arquivo aqui. Funciona melhor com listas nomeadas por dia da semana (Segunda, Terça...) e cards no formato <code>18:00 Treinar</code>.</p>
-    ${fonte}
-    ${total ? '<button class="btn danger wide" id="brotzera" style="margin-top:12px">Apagar a rotina inteira</button>' : ''}
+    <p class="hint" style="margin:11px 0 0">Agenda <b style="color:var(--sand)">${esc(g.calendarNome || g.calendarId)}</b> · ${(S.rotina.eventos||[]).length} eventos dos próximos ${GCAL_DIAS} dias · atualizado em ${esc(quandoTxt)}.</p>
+    <div class="rimport">
+      <button class="btn" id="gatualizar">Atualizar agora</button>
+      <button class="btn" id="gtrocar">Trocar agenda</button>
+    </div>
+    <button class="btn danger wide" id="gsair" style="margin-top:8px">Desconectar</button>
+    <p class="hint" style="margin:12px 0 0">A rotina se atualiza sozinha toda vez que você abre o app, e a cada 15 minutos com ele aberto.</p>
   </div>`;
+}
+
+/* escolher a agenda depois de conectar */
+async function gcalEscolherAgenda(silencioso){
+  const lista = await gcalAgendas();
+  if (!lista.length) { toast('Nenhuma agenda encontrada'); return false; }
+  const escolhida = lista.length === 1 ? lista[0] : await perguntarAgenda(lista);
+  if (!escolhida) return false;
+  S.rotina.google = Object.assign({}, gcalConfig(), { calendarId: escolhida.id, calendarNome: escolhida.nome });
+  salvar();
+  return true;
+}
+
+/* diálogo simples de escolha, sem depender de biblioteca */
+function perguntarAgenda(lista){
+  return new Promise(ok => {
+    const fundo = document.createElement('div');
+    fundo.className = 'modal';
+    fundo.innerHTML = `<div class="modalcard">
+      <span class="label">Qual agenda tem sua rotina?</span>
+      <div class="modallista">${lista.map((c,i) => `<button class="btn wide" data-i="${i}" style="margin-top:8px;text-align:left">${esc(c.nome)}${c.principal ? ' · principal' : ''}</button>`).join('')}</div>
+      <button class="btn wide" data-i="-1" style="margin-top:14px">Cancelar</button>
+    </div>`;
+    fundo.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+      const i = +b.dataset.i;
+      fundo.remove();
+      ok(i >= 0 ? lista[i] : null);
+    });
+    document.body.appendChild(fundo);
+  });
 }
 
 function bindRotina(v){
@@ -1155,16 +1324,62 @@ function bindRotina(v){
   v.querySelectorAll('[data-imp]').forEach(b => b.onclick = () => importarRotina(b.dataset.imp));
 
   if (q('#brotzera')) q('#brotzera').onclick = () => {
-    if (!confirm('Apagar todos os blocos da rotina? Isso não mexe nos hábitos nem no progresso.')) return;
-    S.rotina = { blocos: [], origem: '', importadoEm: '' };
-    salvar(); render(); toast('Rotina apagada');
+    if (!confirm('Apagar os blocos fixos da rotina? Isso não mexe na agenda do Google, nem nos hábitos, nem no progresso.')) return;
+    S.rotina.blocos = []; S.rotina.origem = ''; S.rotina.importadoEm = '';
+    salvar(); render(); toast('Blocos fixos apagados');
   };
+
+  /* ---- Google Calendar ---- */
+  if (q('#gconectar')) q('#gconectar').onclick = async () => {
+    const id = q('#gclient').value.trim();
+    if (!id) { q('#gclient').focus(); return toast('Cole o Client ID primeiro'); }
+    if (!/\.apps\.googleusercontent\.com$/.test(id)) return toast('Esse não parece um Client ID do Google');
+    const btn = q('#gconectar');
+    btn.disabled = true; btn.textContent = 'Conectando…';
+    S.rotina.google = Object.assign({}, gcalConfig(), { clientId: id });
+    try {
+      if (await gcalEscolherAgenda()) {
+        await gcalSincronizar(true);
+        render(); toast('Google Calendar conectado');
+      } else { btn.disabled = false; btn.textContent = 'Conectar com o Google'; }
+    } catch(e) {
+      btn.disabled = false; btn.textContent = 'Conectar com o Google';
+      toast(erroGoogle(e));
+    }
+  };
+
+  if (q('#gatualizar')) q('#gatualizar').onclick = async () => {
+    const btn = q('#gatualizar');
+    btn.disabled = true; btn.textContent = 'Atualizando…';
+    try { await gcalSincronizar(false); render(); toast('Rotina atualizada'); }
+    catch(e){ btn.disabled = false; btn.textContent = 'Atualizar agora'; toast(erroGoogle(e)); }
+  };
+
+  if (q('#gtrocar')) q('#gtrocar').onclick = async () => {
+    try {
+      if (await gcalEscolherAgenda()) { await gcalSincronizar(false); render(); toast('Agenda trocada'); }
+    } catch(e){ toast(erroGoogle(e)); }
+  };
+
+  if (q('#gsair')) q('#gsair').onclick = () => {
+    if (!confirm('Desconectar do Google Calendar? Os eventos importados saem da rotina; seus blocos fixos ficam.')) return;
+    gcalDesconectar();
+  };
+}
+
+function erroGoogle(e){
+  const m = String((e && e.message) || e);
+  if (/cancelad|popup_closed|access_denied/i.test(m)) return 'Login cancelado';
+  if (/sem rede|Failed to fetch|NetworkError/i.test(m)) return 'Sem internet';
+  if (/sem permiss/i.test(m)) return 'O Google recusou o acesso. Confira o Client ID e os usuários de teste.';
+  if (/idpiframe|invalid_client|origin/i.test(m)) return 'Client ID não aceita este endereço. Confira as origens autorizadas.';
+  return 'Não deu para falar com o Google';
 }
 
 /* lê o arquivo e troca a rotina pela importada */
 function importarRotina(tipo){
   const inp = document.getElementById('rotimp');
-  inp.accept = tipo === 'ics' ? '.ics,text/calendar' : '.json,application/json';
+  inp.accept = '.json,application/json';
   inp.onchange = e => {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -1173,21 +1388,15 @@ function importarRotina(tipo){
     r.onload = () => {
       let blocos;
       try {
-        blocos = tipo === 'ics' ? parseICS(r.result) : parseTrello(JSON.parse(r.result));
+        blocos = parseTrello(JSON.parse(r.result));
       } catch(err) {
-        return toast(tipo === 'ics' ? 'Não consegui ler esse .ics' : 'Não consegui ler esse JSON');
+        return toast('Não consegui ler esse JSON');
       }
-      if (!blocos || !blocos.length) {
-        return toast(tipo === 'ics'
-          ? 'Nenhum evento com horário no arquivo'
-          : 'Nenhum card com dia da semana no quadro');
-      }
-      if (S.rotina.blocos.length && !confirm('Isso substitui os ' + S.rotina.blocos.length + ' blocos que já existem. Continuar?')) return;
-      S.rotina = {
-        blocos: blocos.slice(0, 200),
-        origem: tipo,
-        importadoEm: fmtCurto(new Date())
-      };
+      if (!blocos || !blocos.length) return toast('Nenhum card com dia da semana no quadro');
+      if (S.rotina.blocos.length && !confirm('Isso substitui os ' + S.rotina.blocos.length + ' blocos fixos que já existem. Continuar?')) return;
+      S.rotina.blocos = blocos.slice(0, 200);
+      S.rotina.origem = 'trello';
+      S.rotina.importadoEm = fmtCurto(new Date());
       salvar(); render();
       toast(blocos.length + (blocos.length > 1 ? ' blocos importados' : ' bloco importado'));
     };
@@ -1808,8 +2017,13 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b
       const cfga = S.habitos.find(h => /cfga/i.test(h.nome));
       S.aulas = { habitoId: cfga ? cfga.id : '', alvo: Math.ceil(S.dias/2), auto:true };
     }
-    if (!S.rotina || typeof S.rotina !== 'object') S.rotina = { blocos: [], origem: '', importadoEm: '' };
+    if (!S.rotina || typeof S.rotina !== 'object') S.rotina = {};
     if (!Array.isArray(S.rotina.blocos)) S.rotina.blocos = [];
+    if (!Array.isArray(S.rotina.eventos)) S.rotina.eventos = [];
+    if (!S.rotina.google || typeof S.rotina.google !== 'object') S.rotina.google = { clientId:'', calendarId:'', calendarNome:'', sincronizadoEm:'' };
+    /* a importação por arquivo do .ics achatava a agenda inteira numa semana e
+       enchia a rotina de lixo. Quem importou assim começa limpo. */
+    if (S.rotina.origem === 'ics') { S.rotina.blocos = []; S.rotina.origem = ''; S.rotina.importadoEm = ''; }
     salvar();
   }
   diaVisto = diaClamp();
@@ -1817,7 +2031,15 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b
 
   /* o banner da tela inicial acompanha o relógio sozinho */
   setInterval(atualizarAgora, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarAgora(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    atualizarAgora();
+    gcalSincronizarQuieto();          /* voltou pro app: confere a agenda */
+  });
+
+  /* a rotina se atualiza sozinha: ao abrir e a cada 15 min com o app aberto */
+  gcalSincronizarQuieto();
+  setInterval(gcalSincronizarQuieto, 15 * 60 * 1000);
 })();
 </script>
 </body>
