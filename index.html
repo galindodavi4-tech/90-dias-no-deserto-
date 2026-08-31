@@ -33,7 +33,10 @@
   --display:'Archivo Black',system-ui,sans-serif;
   --body:'Barlow',system-ui,sans-serif;
   --nav-h:64px;
+  color-scheme:dark;
 }
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--sand);
+  background:var(--ash2);border-radius:5px;padding:1px 5px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{
@@ -138,6 +141,47 @@ textarea{resize:vertical;min-height:84px;line-height:1.5}
 .ptsrow span{display:block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dust);margin-top:5px;font-weight:600}
 .ptshoje{font-family:var(--display);font-size:26px;color:var(--ember);line-height:1}
 .ptshoje small{font-size:13px;color:var(--dust);font-family:var(--body);font-weight:600}
+
+/* ---------- o que é agora ---------- */
+.agora{position:relative;border-radius:16px;padding:18px 20px 19px;margin-bottom:14px;overflow:hidden;
+  background:linear-gradient(135deg,#2A1E10,#1C1811);border:1px solid var(--ember-deep)}
+.agora.prox{background:var(--ash);border-color:var(--line)}
+.agora .quando{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ember);font-weight:700}
+.agora.prox .quando{color:var(--dust)}
+.agora .evt{display:flex;align-items:center;gap:13px;margin-top:9px}
+.agora .emo{font-size:34px;line-height:1;flex:none}
+.agora.prox .emo{font-size:27px;opacity:.75}
+.agora .nome{font-family:var(--display);font-size:23px;line-height:1.15;color:var(--sand);letter-spacing:-.01em}
+.agora.prox .nome{font-size:18px;color:var(--dust)}
+.agora .faixa{margin-top:11px;font-size:12.5px;color:var(--dust);font-weight:600}
+.agora .faixa b{color:var(--ember);font-weight:700}
+.agora .prog{height:5px;background:rgba(231,223,204,.10);border-radius:99px;overflow:hidden;margin-top:10px}
+.agora .prog i{display:block;height:100%;background:var(--ember);border-radius:99px}
+.agora .vazio{font-size:13px;color:var(--dust);line-height:1.5;margin:9px 0 0}
+
+/* ---------- aba rotina ---------- */
+.rdia{margin-bottom:12px}
+.rdia > h3{font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dust);margin:0 0 8px;display:flex;align-items:center;gap:9px}
+.rdia.hoje > h3{color:var(--ember)}
+.rdia.hoje > h3::after{content:'HOJE';font-size:9px;letter-spacing:.14em;background:var(--ember);color:#191510;
+  padding:2px 6px;border-radius:5px}
+.bloco{display:flex;align-items:center;gap:11px;background:var(--ash);border:1px solid var(--line);
+  border-radius:11px;padding:10px 12px;margin-bottom:7px}
+.bloco.agorinha{border-color:var(--ember);background:#241C12}
+.bloco .hora{font-family:var(--display);font-size:12px;color:var(--ember);flex:none;width:52px;
+  font-variant-numeric:tabular-nums;line-height:1.25}
+.bloco .hora span{display:block;font-family:var(--body);font-size:10.5px;color:var(--dust);font-weight:600}
+.bloco .txt{flex:1;font-size:14px;font-weight:600;line-height:1.3;min-width:0;overflow-wrap:anywhere}
+.bloco .txt em{display:block;font-style:normal;font-size:11px;color:var(--dust);font-weight:600;margin-top:2px}
+.bloco .del{background:none;border:none;color:var(--dust);font-size:19px;line-height:1;padding:2px 4px;flex:none}
+.semhora .hora{color:var(--dust)}
+.rvazio{text-align:center;padding:8px 0 2px}
+.rvazio .big{font-size:38px;line-height:1;margin-bottom:10px}
+.novobloco{display:grid;gap:8px}
+.novobloco .horas{display:flex;gap:8px;align-items:center}
+.novobloco .horas input{flex:1;min-width:0}
+.rimport{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 
 /* ---------- habit rows ---------- */
 .hrow{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--ash);
@@ -260,6 +304,7 @@ nav button.on{color:var(--ember);border-top-color:var(--ember)}
 
 <nav>
   <button data-tab="hoje" class="on"><span class="ic">✓</span>Hoje</button>
+  <button data-tab="rotina"><span class="ic">◷</span>Rotina</button>
   <button data-tab="mapa"><span class="ic">▦</span>Mapa</button>
   <button data-tab="metas"><span class="ic">◎</span>Metas</button>
   <button data-tab="testes"><span class="ic">◈</span>Testes</button>
@@ -269,6 +314,7 @@ nav button.on{color:var(--ember);border-top-color:var(--ember)}
 <div class="toast" id="toast"></div>
 <canvas id="cv" width="1080" height="1920" style="display:none"></canvas>
 <input type="file" id="importer" accept="application/json,.json" style="display:none">
+<input type="file" id="rotimp" style="display:none">
 
 <script>
 /* ============ armazenamento (funciona no Claude e em site publicado) ============ */
@@ -340,7 +386,8 @@ function novoEstado(){
     metricas: METRICAS.map(m => ({ id:uid(), nome:m[0], unidade:m[1], dir:m[2], tipo:m[3] })),
     medidas: {},
     prep: {},
-    aulas: { habitoId: cfga ? cfga.id : '', alvo: 45, auto:true }
+    aulas: { habitoId: cfga ? cfga.id : '', alvo: 45, auto:true },
+    rotina: { blocos: [], origem: '', importadoEm: '' }
   };
 }
 let S = novoEstado();
@@ -441,6 +488,191 @@ function marcos(){
   }));
 }
 
+/* ============ rotina ============ */
+const DIAS_SEM = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const DIAS_CURTO = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+/* 'HH:MM' -> minutos desde a meia-noite; devolve null se não for hora válida */
+function hm(t){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t||'').trim());
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  return (h >= 0 && h < 24 && mi >= 0 && mi < 60) ? h*60 + mi : null;
+}
+const mh = min => String(Math.floor(min/60) % 24).padStart(2,'0') + ':' + String(min % 60).padStart(2,'0');
+function duracaoTxt(min){
+  if (min < 60) return min + ' min';
+  const h = Math.floor(min/60), m = min % 60;
+  return h + ' h' + (m ? ' ' + m + ' min' : '');
+}
+
+const EMOJIS = [
+  [/trein|muscul|academia|gym|for[çc]a|cross/i,'🏋️'],
+  [/corr|run|cardio|caminh|bike|bicicl|pedal|nata|swim/i,'🏃'],
+  [/aula|estud|curso|cfga|leitura|ler|livro|faculdade|prova/i,'📚'],
+  [/almo[çc]|jantar|caf[ée]|refei|comer|lanche|marmita/i,'🍽️'],
+  [/dorm|sono|deitar|descan|soneca/i,'😴'],
+  [/acord|despertar|levantar/i,'⏰'],
+  [/[áa]gua|hidrat/i,'💧'],
+  [/banho|ducha|gelad/i,'🚿'],
+  [/trabalh|escrit[óo]rio|reuni|job|servi[çc]o|expediente/i,'💼'],
+  [/ora[çc]|igreja|missa|b[íi]blia|devocional|deus|f[ée]/i,'🙏'],
+  [/di[áa]rio|escrever|anota|journal/i,'✍️'],
+  [/along|mobilidade|yoga|medita|respira/i,'🧘'],
+  [/fisio|massag|recupera/i,'🩹'],
+  [/story|post|rede|instagram|grupo/i,'📱'],
+  [/desloc|carro|[ôo]nibus|transporte|trajeto|viagem/i,'🚗']
+];
+const emojiDe = nome => (EMOJIS.find(e => e[0].test(nome)) || [null,'🔥'])[1];
+
+/* blocos de um dia da semana, os com horário primeiro e em ordem */
+function blocosDoDia(dia){
+  return (S.rotina.blocos || [])
+    .filter(b => b.dia === dia)
+    .slice()
+    .sort((a,b) => {
+      const ha = hm(a.ini), hb = hm(b.ini);
+      if (ha === null && hb === null) return 0;
+      if (ha === null) return 1;
+      if (hb === null) return -1;
+      return ha - hb;
+    });
+}
+/* fim efetivo de um bloco: o que foi informado, ou uma hora depois do início */
+function fimDe(b){
+  const i = hm(b.ini); if (i === null) return null;
+  const f = hm(b.fim);
+  return (f !== null && f > i) ? f : Math.min(24*60, i + 60);
+}
+
+/* o que está acontecendo agora e o que vem depois */
+function agenda(quando){
+  const t = quando || new Date();
+  const dia = t.getDay(), min = t.getHours()*60 + t.getMinutes();
+  const hoje = blocosDoDia(dia).filter(b => hm(b.ini) !== null);
+  const atual = hoje.find(b => min >= hm(b.ini) && min < fimDe(b)) || null;
+  let proximo = hoje.find(b => hm(b.ini) > min) || null, amanha = false;
+  if (!proximo) {
+    for (let i = 1; i <= 7 && !proximo; i++) {
+      const cand = blocosDoDia((dia + i) % 7).filter(b => hm(b.ini) !== null)[0];
+      if (cand) { proximo = cand; amanha = true; }
+    }
+  }
+  return { atual, proximo, amanha, min, dia };
+}
+
+/* ---- importação: Google Calendar (.ics) ---- */
+function parseICS(texto){
+  /* desdobra as linhas continuadas (RFC 5545) */
+  const linhas = String(texto).replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n[ \t]/g,'').split('\n');
+  const blocos = [], DIAS_ICS = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 };
+  let ev = null;
+
+  const desescapa = v => String(v).replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\').trim();
+  /* devolve {dia, hh, mm} de um DTSTART/DTEND, ou null se for evento de dia inteiro */
+  function quando(valor, params){
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(String(valor).trim());
+    if (!m || !m[4]) return null;                     /* dia inteiro: sem horário, não entra */
+    const [_, Y, Mo, D, H, Mi, , z] = m;
+    /* horário em UTC vira horário local; com TZID ou sem sufixo, é hora de parede */
+    const d = z ? new Date(Date.UTC(+Y, +Mo-1, +D, +H, +Mi))
+                : new Date(+Y, +Mo-1, +D, +H, +Mi);
+    return { dia: d.getDay(), hhmm: mh(d.getHours()*60 + d.getMinutes()) };
+  }
+
+  linhas.forEach(linha => {
+    if (/^BEGIN:VEVENT/i.test(linha)) { ev = {}; return; }
+    if (/^END:VEVENT/i.test(linha)) {
+      if (ev && ev.nome && ev.ini) {
+        /* evento semanal com BYDAY vira um bloco por dia listado */
+        const dias = ev.byday && ev.byday.length ? ev.byday : [ev.dia];
+        dias.forEach(dia => blocos.push({ id:uid(), dia, ini:ev.ini, fim:ev.fim || '', nome:ev.nome, rec: !!ev.semanal }));
+      }
+      ev = null; return;
+    }
+    if (!ev) return;
+    const corte = linha.indexOf(':'); if (corte < 0) return;
+    const cabeca = linha.slice(0, corte), valor = linha.slice(corte + 1);
+    const nomeProp = cabeca.split(';')[0].toUpperCase();
+
+    if (nomeProp === 'SUMMARY') ev.nome = desescapa(valor).slice(0,60);
+    else if (nomeProp === 'DTSTART') { const q = quando(valor); if (q) { ev.dia = q.dia; ev.ini = q.hhmm; } }
+    else if (nomeProp === 'DTEND')   { const q = quando(valor); if (q) ev.fim = q.hhmm; }
+    else if (nomeProp === 'RRULE') {
+      if (/FREQ=(WEEKLY|DAILY)/i.test(valor)) {
+        ev.semanal = true;
+        if (/FREQ=DAILY/i.test(valor)) ev.byday = [0,1,2,3,4,5,6];
+        const by = /BYDAY=([^;]+)/i.exec(valor);
+        if (by) {
+          const ds = by[1].split(',')
+            .map(s => DIAS_ICS[s.replace(/^[-+]?\d+/,'').trim().toUpperCase()])
+            .filter(d => d !== undefined);
+          if (ds.length) ev.byday = ds;
+        }
+      }
+    }
+  });
+  /* uma agenda exportada inteira traz muito evento avulso. Se houver eventos que
+     se repetem toda semana, são eles a rotina; os avulsos só entram quando não há
+     nenhum recorrente no arquivo. */
+  const recorrentes = blocos.filter(b => b.rec);
+  return dedup(recorrentes.length ? recorrentes : blocos).map(b => {
+    delete b.rec; return b;
+  });
+}
+
+/* ---- importação: Trello (.json do quadro) ---- */
+function parseTrello(dados){
+  const blocos = [];
+  const listas = {};
+  (dados.lists || []).forEach(l => { if (!l.closed) listas[l.id] = String(l.name || ''); });
+
+  /* nome de lista que é um dia da semana */
+  const PADROES = [
+    [/^(dom|sun)/i, 0], [/^(seg|mon)/i, 1], [/^(ter|tue)/i, 2], [/^(qua|wed)/i, 3],
+    [/^(qui|thu)/i, 4], [/^(sex|fri)/i, 5], [/^(s[áa]b|sat)/i, 6]
+  ];
+  const diaDaLista = nome => { const p = PADROES.find(x => x[0].test(String(nome).trim())); return p ? p[1] : null; };
+
+  (dados.cards || []).forEach(c => {
+    if (c.closed) return;
+    let nome = String(c.name || '').trim();
+    if (!nome) return;
+
+    /* horário escrito no começo do card: "18:00 Treinar", "18h Treinar", "18:00-19:30 Treinar" */
+    let ini = '', fim = '';
+    const mFaixa = /^(\d{1,2})[:h](\d{2})?\s*(?:[-–às]{1,3}\s*(\d{1,2})[:h](\d{2})?)?\s*[-–—:]?\s+(.+)$/i.exec(nome);
+    if (mFaixa) {
+      ini = mh(+mFaixa[1]*60 + (+mFaixa[2] || 0));
+      if (mFaixa[3]) fim = mh(+mFaixa[3]*60 + (+mFaixa[4] || 0));
+      nome = mFaixa[5].trim();
+    }
+
+    /* dia: da lista, ou da data de entrega do card */
+    let dia = diaDaLista(listas[c.idList]);
+    if (c.due) {
+      const d = new Date(c.due);
+      if (!isNaN(d)) {
+        if (dia === null) dia = d.getDay();
+        if (!ini) ini = mh(d.getHours()*60 + d.getMinutes());
+      }
+    }
+    if (dia === null) return;   /* sem dia da semana não dá para montar rotina */
+    blocos.push({ id:uid(), dia, ini, fim, nome: nome.slice(0,60) });
+  });
+  return dedup(blocos);
+}
+
+/* tira blocos repetidos (mesmo dia, mesma hora, mesmo nome) */
+function dedup(blocos){
+  const vistos = new Set();
+  return blocos.filter(b => {
+    const k = b.dia + '|' + b.ini + '|' + b.nome.toLowerCase();
+    if (vistos.has(k)) return false;
+    vistos.add(k); return true;
+  });
+}
+
 /* ============ escrita ============ */
 let salvarTimer = null;
 function salvar(){ clearTimeout(salvarTimer); salvarTimer = setTimeout(() => store.set(S), 200); }
@@ -463,8 +695,8 @@ function render(){
   document.body.classList.toggle('antes', diaAtual() < 1);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const v = document.getElementById('view');
-  v.innerHTML = ({ hoje: viewHoje, mapa: viewMapa, metas: viewMetas, testes: viewTestes, ajustes: viewAjustes })[tab]();
-  ({ hoje: bindHoje, mapa: bindMapa, metas: bindMetas, testes: bindTestes, ajustes: bindAjustes })[tab](v);
+  v.innerHTML = ({ hoje: viewHoje, rotina: viewRotina, mapa: viewMapa, metas: viewMetas, testes: viewTestes, ajustes: viewAjustes })[tab]();
+  ({ hoje: bindHoje, rotina: bindRotina, mapa: bindMapa, metas: bindMetas, testes: bindTestes, ajustes: bindAjustes })[tab](v);
 }
 
 /* ---------- HOJE ---------- */
@@ -502,6 +734,53 @@ function viewAulas(){
     <div class="bar"><i style="width:${pct}%"></i></div>
     <p class="hint" style="margin:0">${atraso > 0 ? atraso + ' aula' + (atraso>1?'s':'') + ' atrás do ritmo' : (feito >= alvo ? 'Meta batida.' : 'No ritmo.')} · Uma aula a cada dois dias de desafio.</p>
   </div>`;
+}
+
+/* ---------- o que é agora (passo 5) ---------- */
+function corpoAgora(){
+  if (!S.rotina.blocos.length) {
+    return `<div class="quando">Rotina</div>
+      <p class="vazio">Monte sua rotina na aba <button class="linkbtn" data-goto="rotina">Rotina</button> e o app passa a avisar, aqui em cima, o que é a hora de fazer.</p>`;
+  }
+  const { atual, proximo, amanha, min } = agenda();
+
+  if (atual) {
+    const i = hm(atual.ini), f = fimDe(atual);
+    const falta = f - min, pct = Math.round((min - i) / (f - i) * 100);
+    return `<div class="quando">Agora</div>
+      <div class="evt">
+        <span class="emo">${emojiDe(atual.nome)}</span>
+        <span class="nome">${esc(atual.nome)}</span>
+      </div>
+      <div class="faixa">${atual.ini}–${mh(f)} · termina em <b>${duracaoTxt(falta)}</b></div>
+      <div class="prog"><i style="width:${Math.max(2,Math.min(100,pct))}%"></i></div>`;
+  }
+  if (proximo) {
+    const espera = amanha ? null : hm(proximo.ini) - min;
+    return `<div class="quando">A seguir</div>
+      <div class="evt">
+        <span class="emo">${emojiDe(proximo.nome)}</span>
+        <span class="nome">${esc(proximo.nome)}</span>
+      </div>
+      <div class="faixa">${esc(proximo.ini)} · ${amanha ? DIAS_SEM[proximo.dia] : 'daqui a <b>' + duracaoTxt(espera) + '</b>'}</div>`;
+  }
+  return `<div class="quando">Rotina</div>
+    <p class="vazio">Nada marcado com horário na sua rotina. Adicione horários na aba <button class="linkbtn" data-goto="rotina">Rotina</button>.</p>`;
+}
+
+function viewAgora(){
+  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
+  return `<div class="agora ${atual?'':'prox'}" id="agora">${corpoAgora()}</div>`;
+}
+
+/* redesenha só o banner, sem re-render da tela inteira (não perde o foco do diário) */
+function atualizarAgora(){
+  const el = document.getElementById('agora');
+  if (!el) return;
+  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
+  el.className = 'agora ' + (atual ? '' : 'prox');
+  el.innerHTML = corpoAgora();
+  el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { tab = b.dataset.goto; render(); window.scrollTo({ top:0 }); });
 }
 
 function viewFrase(dt){
@@ -566,7 +845,7 @@ function viewHoje(){
   else if (d < hoje) aviso = '<div class="badge">Dia passado</div>';
   else aviso = '<div class="badge">Ainda vem</div>';
 
-  if (antes) return viewFrase(new Date()) + viewPrep() + `
+  if (antes) return viewAgora() + viewFrase(new Date()) + viewPrep() + `
   <div class="card">
     <div class="spread" style="margin-bottom:13px">
       <span class="label">Os hábitos do desafio</span>
@@ -576,7 +855,7 @@ function viewHoje(){
     <p class="hint" style="margin:12px 0 0">Liberam no dia 1. Use esta semana para planejar como encaixar cada um na rotina. Para mudar a lista, vá em <button class="linkbtn" data-goto="ajustes">Ajustes</button>.</p>
   </div>` + viewPlacarPrep();
 
-  const topo = viewFrase(dataDoDia(d)) + `
+  const topo = viewAgora() + viewFrase(dataDoDia(d)) + `
   <div class="stats">
     <div class="stat"><b>${Math.max(0,Math.min(hoje,S.dias))}<span style="font-size:13px;color:var(--dust)">/${S.dias}</span></b><span>Dia</span></div>
     <div class="stat"><b>${sequencia()}</b><span>Sequência</span></div>
@@ -786,6 +1065,136 @@ function bindMapa(v){
   });
   const sc = v.querySelector('#scroll');
   if (sc) sc.scrollLeft = Math.max(0, (diaClamp()-4) * 29);
+}
+
+/* ---------- ROTINA ---------- */
+function viewRotina(){
+  const hojeSem = new Date().getDay();
+  const { atual } = S.rotina.blocos.length ? agenda() : { atual:null };
+  const total = S.rotina.blocos.length;
+
+  /* a semana começa no dia de hoje, para o que interessa ficar em cima */
+  const ordem = Array.from({length:7}, (_,i) => (hojeSem + i) % 7);
+  const dias = ordem.map(dia => {
+    const bs = blocosDoDia(dia);
+    if (!bs.length) return '';
+    const linhas = bs.map(b => {
+      const semHora = hm(b.ini) === null;
+      const f = fimDe(b);
+      return `<div class="bloco ${b === atual ? 'agorinha' : ''} ${semHora ? 'semhora' : ''}">
+        <span class="hora">${semHora ? '—' : esc(b.ini) + '<span>' + mh(f) + '</span>'}</span>
+        <span class="txt">${emojiDe(b.nome)} ${esc(b.nome)}</span>
+        <button class="del" data-delb="${b.id}" aria-label="Excluir bloco">×</button>
+      </div>`;
+    }).join('');
+    return `<section class="rdia ${dia === hojeSem ? 'hoje' : ''}">
+      <h3>${DIAS_SEM[dia]}</h3>
+      ${linhas}
+    </section>`;
+  }).join('');
+
+  const vazio = `<div class="card rvazio">
+    <div class="big">◷</div>
+    <p class="hint" style="margin:0 0 4px">Sua rotina ainda está vazia.</p>
+    <p class="hint" style="margin:0">Monte abaixo, bloco por bloco, ou traga pronta do Google Calendar ou do Trello.</p>
+  </div>`;
+
+  const fonte = S.rotina.origem
+    ? `<p class="hint" style="margin:10px 0 0">Última importação: ${S.rotina.origem === 'ics' ? 'Google Calendar' : 'Trello'}${S.rotina.importadoEm ? ' em ' + esc(S.rotina.importadoEm) : ''}.</p>`
+    : '';
+
+  return `
+  ${total ? dias : vazio}
+
+  <div class="card">
+    <span class="label">Novo bloco</span>
+    <div class="novobloco" style="margin-top:12px">
+      <input type="text" id="bnome" placeholder="O que é? Ex.: Treino de força" maxlength="60">
+      <select id="bdia" aria-label="Dia da semana">${DIAS_SEM.map((n,i) => `<option value="${i}" ${i===hojeSem?'selected':''}>${n}</option>`).join('')}</select>
+      <div class="horas">
+        <input type="time" id="bini" aria-label="Hora de início">
+        <span class="hint">até</span>
+        <input type="time" id="bfim" aria-label="Hora de fim">
+      </div>
+      <button class="btn primary wide" id="baddblock">Adicionar à rotina</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0">O horário de fim é opcional — sem ele o bloco dura uma hora. Sem horário nenhum, o bloco fica no dia mas não entra no aviso da tela inicial.</p>
+  </div>
+
+  <div class="card">
+    <span class="label">Trazer rotina pronta</span>
+    <div class="rimport">
+      <button class="btn" data-imp="ics">Google Calendar</button>
+      <button class="btn" data-imp="trello">Trello</button>
+    </div>
+    <p class="hint" style="margin:12px 0 0"><b style="color:var(--sand)">Google Calendar:</b> no computador, abra Configurações → Importar e exportar → Exportar. Descompacte o arquivo e escolha aqui o <code>.ics</code> da agenda que tem sua rotina.</p>
+    <p class="hint" style="margin:8px 0 0"><b style="color:var(--sand)">Trello:</b> abra o quadro → menu → Mais → Imprimir e exportar → Exportar como JSON. Salve e escolha o arquivo aqui. Funciona melhor com listas nomeadas por dia da semana (Segunda, Terça...) e cards no formato <code>18:00 Treinar</code>.</p>
+    ${fonte}
+    ${total ? '<button class="btn danger wide" id="brotzera" style="margin-top:12px">Apagar a rotina inteira</button>' : ''}
+  </div>`;
+}
+
+function bindRotina(v){
+  const q = sel => v.querySelector(sel);
+
+  q('#baddblock').onclick = () => {
+    const nome = q('#bnome').value.trim();
+    if (!nome) { q('#bnome').focus(); return toast('Dê um nome ao bloco'); }
+    const ini = q('#bini').value, fim = q('#bfim').value;
+    if (fim && !ini) return toast('Preencha o horário de início');
+    if (ini && fim && hm(fim) !== null && hm(ini) !== null && hm(fim) <= hm(ini)) return toast('O fim tem que ser depois do início');
+    S.rotina.blocos.push({ id:uid(), dia:+q('#bdia').value, ini, fim, nome: nome.slice(0,60) });
+    salvar(); render(); toast('Bloco adicionado');
+  };
+
+  v.querySelectorAll('[data-delb]').forEach(b => b.onclick = () => {
+    S.rotina.blocos = S.rotina.blocos.filter(x => x.id !== b.dataset.delb);
+    salvar(); render();
+  });
+
+  v.querySelectorAll('[data-imp]').forEach(b => b.onclick = () => importarRotina(b.dataset.imp));
+
+  if (q('#brotzera')) q('#brotzera').onclick = () => {
+    if (!confirm('Apagar todos os blocos da rotina? Isso não mexe nos hábitos nem no progresso.')) return;
+    S.rotina = { blocos: [], origem: '', importadoEm: '' };
+    salvar(); render(); toast('Rotina apagada');
+  };
+}
+
+/* lê o arquivo e troca a rotina pela importada */
+function importarRotina(tipo){
+  const inp = document.getElementById('rotimp');
+  inp.accept = tipo === 'ics' ? '.ics,text/calendar' : '.json,application/json';
+  inp.onchange = e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      let blocos;
+      try {
+        blocos = tipo === 'ics' ? parseICS(r.result) : parseTrello(JSON.parse(r.result));
+      } catch(err) {
+        return toast(tipo === 'ics' ? 'Não consegui ler esse .ics' : 'Não consegui ler esse JSON');
+      }
+      if (!blocos || !blocos.length) {
+        return toast(tipo === 'ics'
+          ? 'Nenhum evento com horário no arquivo'
+          : 'Nenhum card com dia da semana no quadro');
+      }
+      if (S.rotina.blocos.length && !confirm('Isso substitui os ' + S.rotina.blocos.length + ' blocos que já existem. Continuar?')) return;
+      S.rotina = {
+        blocos: blocos.slice(0, 200),
+        origem: tipo,
+        importadoEm: fmtCurto(new Date())
+      };
+      salvar(); render();
+      toast(blocos.length + (blocos.length > 1 ? ' blocos importados' : ' bloco importado'));
+    };
+    r.onerror = () => toast('Não consegui abrir o arquivo');
+    r.readAsText(f);
+  };
+  inp.click();
 }
 
 /* ---------- METAS ---------- */
@@ -1399,10 +1808,16 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b
       const cfga = S.habitos.find(h => /cfga/i.test(h.nome));
       S.aulas = { habitoId: cfga ? cfga.id : '', alvo: Math.ceil(S.dias/2), auto:true };
     }
+    if (!S.rotina || typeof S.rotina !== 'object') S.rotina = { blocos: [], origem: '', importadoEm: '' };
+    if (!Array.isArray(S.rotina.blocos)) S.rotina.blocos = [];
     salvar();
   }
   diaVisto = diaClamp();
   render();
+
+  /* o banner da tela inicial acompanha o relógio sozinho */
+  setInterval(atualizarAgora, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarAgora(); });
 })();
 </script>
 </body>
