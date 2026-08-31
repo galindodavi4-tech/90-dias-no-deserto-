@@ -575,149 +575,122 @@ function agenda(quando){
 }
 
 /* ============ Google Calendar ============
-   Tudo no navegador, sem servidor. O app pede um token de leitura ao Google
-   (Google Identity Services) e busca os eventos já expandidos e no fuso certo,
-   numa janela dos próximos dias. O token fica só na memória: ao abrir o app de
-   novo, é pedido outra vez em silêncio enquanto a sessão do Google estiver viva. */
-const GCAL_ESCOPO = 'https://www.googleapis.com/auth/calendar.readonly';
-const GCAL_DIAS = 14;              /* janela buscada, em dias */
-let gcalToken = null;              /* { valor, expira } — nunca vai para o disco */
-let gcalCliente = null;            /* token client do GIS, criado uma vez */
-let gcalSincronizando = false;
+   Quem fala com o Google é o servidor, não o app. O usuário autoriza uma vez;
+   o servidor guarda o refresh token, registra um canal de aviso (webhook) e
+   mantém um espelho da agenda pronto. O app só lê esse espelho — leitura rápida,
+   sem token no aparelho e sem gastar cota do Google.
+   Quando algo muda na agenda, o Google avisa o servidor na hora; o app pergunta
+   "mudou?" de poucos em poucos segundos e recebe 204 quando não mudou nada. */
+const GCAL_PING = 20000;           /* de quanto em quanto o app pergunta, em ms */
+let gcalOcupado = false;
 
 function gcalConfig(){ return (S.rotina && S.rotina.google) || {}; }
-const gcalLigado = () => !!gcalConfig().clientId && !!gcalConfig().calendarId;
+const gcalLigado = () => !!gcalConfig().conta;
 
-/* carrega o script do Google Identity Services uma única vez */
-function carregarGIS(){
-  if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
-  if (carregarGIS._p) return carregarGIS._p;
-  carregarGIS._p = new Promise((ok, falha) => {
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true; s.defer = true;
-    s.onload = () => ok();
-    s.onerror = () => { carregarGIS._p = null; falha(new Error('sem rede')); };
-    document.head.appendChild(s);
-  });
-  return carregarGIS._p;
+/* o app e a API moram no mesmo endereço, então caminho relativo basta */
+async function api(caminho, opcoes){
+  const r = await fetch(caminho, Object.assign({ headers: { 'Content-Type':'application/json' } }, opcoes || {}));
+  if (r.status === 204) return null;
+  let j = null;
+  try { j = await r.json(); } catch(e){}
+  if (!r.ok) {
+    const e = new Error((j && j.erro) || ('http ' + r.status));
+    e.status = r.status; throw e;
+  }
+  return j;
 }
 
-/* pede um token de acesso. silencioso = não mostra tela nenhuma se já houver
-   consentimento e sessão do Google ativa. */
-async function gcalPedirToken(silencioso){
-  if (gcalToken && gcalToken.expira > Date.now() + 60000) return gcalToken.valor;
-  const clientId = gcalConfig().clientId;
-  if (!clientId) throw new Error('sem client id');
-  await carregarGIS();
+/* começa a autorização: sai do app e volta com a chave da conta no # */
+function gcalConectar(){ location.href = '/api/auth/start'; }
 
-  return new Promise((ok, falha) => {
-    const resolver = resp => {
-      if (resp && resp.access_token) {
-        gcalToken = { valor: resp.access_token, expira: Date.now() + (resp.expires_in || 3600) * 1000 };
-        ok(gcalToken.valor);
-      } else {
-        falha(new Error(resp && resp.error ? resp.error : 'sem token'));
-      }
-    };
-    if (!gcalCliente || gcalCliente._id !== clientId) {
-      gcalCliente = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: GCAL_ESCOPO,
-        callback: r => gcalCliente._cb && gcalCliente._cb(r),
-        error_callback: e => gcalCliente._err && gcalCliente._err(e)
-      });
-      gcalCliente._id = clientId;
-    }
-    gcalCliente._cb = resolver;
-    gcalCliente._err = e => falha(new Error((e && e.type) || 'cancelado'));
-    try { gcalCliente.requestAccessToken({ prompt: silencioso ? '' : 'consent' }); }
-    catch(e){ falha(e); }
-  });
-}
-
-async function gcalBuscar(caminho, params, silencioso){
-  const token = await gcalPedirToken(silencioso);
-  const url = new URL('https://www.googleapis.com/calendar/v3/' + caminho);
-  Object.entries(params || {}).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (r.status === 401 || r.status === 403) { gcalToken = null; throw new Error('sem permissão'); }
-  if (!r.ok) throw new Error('http ' + r.status);
-  return r.json();
-}
-
-/* as agendas da conta, para o usuário escolher qual tem a rotina */
-async function gcalAgendas(){
-  const d = await gcalBuscar('users/me/calendarList', { maxResults: 100, minAccessRole: 'reader' });
-  return (d.items || []).map(c => ({ id: c.id, nome: c.summary || c.id, principal: !!c.primary }));
-}
-
-/* converte um evento da API em item da rotina. Devolve null para o que não serve. */
-function gcalParaItem(ev){
-  if (!ev || ev.status === 'cancelled') return null;
-  const ini = ev.start && ev.start.dateTime;
-  if (!ini) return null;                                  /* dia inteiro: sem horário */
-  const di = new Date(ini);
-  if (isNaN(di)) return null;
-  const df = ev.end && ev.end.dateTime ? new Date(ev.end.dateTime) : null;
-  const mesmoDia = df && toISO(df) === toISO(di);
-  return {
-    id: 'g' + (ev.id || uid()),
-    data: toISO(di),
-    ini: mh(di.getHours()*60 + di.getMinutes()),
-    fim: (df && mesmoDia) ? mh(df.getHours()*60 + df.getMinutes()) : '',
-    nome: String(ev.summary || 'Sem título').trim().slice(0,60),
-    google: true
-  };
-}
-
-/* busca a janela de eventos e guarda. silencioso = sem abrir tela de login. */
-async function gcalSincronizar(silencioso){
-  if (gcalSincronizando || !gcalLigado()) return false;
-  gcalSincronizando = true;
+/* o retorno do Google vem como #gconta=... ou #gerro=... */
+async function gcalLerRetorno(){
+  const m = /^#g(conta|erro)=([^&]*)/.exec(location.hash || '');
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (m[1] === 'erro') {
+    toast(m[2] === 'sem_refresh' ? 'O Google não deu permissão contínua' : 'Não deu para conectar');
+    return false;
+  }
+  S.rotina.google = { conta: m[2], calendarId:'', calendarNome:'', versao:0, atualizadoEm:'', webhook:false };
+  salvar();
+  tab = 'rotina'; render();
   try {
-    const agora = new Date();
-    const de = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-    const ate = addDays(de, GCAL_DIAS);
-    let pagina = '', itens = [], voltas = 0;
-    do {
-      const d = await gcalBuscar('calendars/' + encodeURIComponent(gcalConfig().calendarId) + '/events', {
-        timeMin: de.toISOString(),
-        timeMax: ate.toISOString(),
-        singleEvents: 'true',          /* o Google expande as repetições por nós */
-        orderBy: 'startTime',
-        maxResults: '250',
-        showDeleted: 'false',
-        pageToken: pagina
-      }, silencioso);
-      itens = itens.concat(d.items || []);
-      pagina = d.nextPageToken || '';
-    } while (pagina && ++voltas < 8);
+    if (await gcalEscolherAgenda()) toast('Google Calendar conectado');
+  } catch(e){ toast(erroGoogle(e)); }
+  render();
+  return true;
+}
 
-    S.rotina.eventos = itens.map(gcalParaItem).filter(Boolean).slice(0, 400);
-    S.rotina.google = Object.assign({}, gcalConfig(), { sincronizadoEm: new Date().toISOString() });
-    salvar();
-    return true;
+async function gcalAgendas(){
+  const d = await api('/api/agendas?conta=' + encodeURIComponent(gcalConfig().conta));
+  return (d && d.agendas) || [];
+}
+
+/* guarda o que o servidor devolveu sobre a rotina */
+function gcalGuardar(d){
+  if (!d) return false;
+  S.rotina.eventos = d.eventos || [];
+  S.rotina.google = Object.assign({}, gcalConfig(), {
+    calendarId: d.calendarId || gcalConfig().calendarId || '',
+    calendarNome: d.calendarNome || gcalConfig().calendarNome || '',
+    versao: d.versao || 0,
+    atualizadoEm: d.atualizadoEm || '',
+    webhook: !!d.webhook,
+    avisoWebhook: d.avisoWebhook || ''
+  });
+  salvar();
+  return true;
+}
+
+/* pergunta ao servidor se mudou. forcar = ignora o espelho e rebusca no Google. */
+async function gcalSincronizar(forcar){
+  if (!gcalLigado()) return false;
+  const g = gcalConfig();
+  const q = '/api/rotina?conta=' + encodeURIComponent(g.conta)
+          + (forcar ? '&forcar=1' : '&v=' + encodeURIComponent(g.versao || 0));
+  return gcalGuardar(await api(q));
+}
+
+/* a versão que roda sozinha: nenhum erro aparece na tela */
+async function gcalSincronizarQuieto(){
+  if (!gcalLigado() || gcalOcupado || document.hidden) return;
+  gcalOcupado = true;
+  try {
+    if (await gcalSincronizar(false)) {
+      if (tab === 'rotina') render(); else atualizarAgora();
+    }
+  } catch(e){
+    if (e.status === 401 || e.status === 404) {
+      /* acesso revogado ou conta apagada: sai do modo conectado, blocos fixos ficam */
+      S.rotina.eventos = []; S.rotina.google = {};
+      salvar();
+      if (tab === 'rotina') render(); else atualizarAgora();
+      toast('A conexão com o Google caiu. Conecte de novo.');
+    }
+    /* sem rede: fica com o que já estava guardado */
   } finally {
-    gcalSincronizando = false;
+    gcalOcupado = false;
   }
 }
 
-/* sincroniza sem incomodar: erro nenhum aparece na tela */
-async function gcalSincronizarQuieto(){
-  if (!gcalLigado()) return;
-  try {
-    const mudou = await gcalSincronizar(true);
-    if (mudou) { if (tab === 'rotina') render(); else atualizarAgora(); }
-  } catch(e){ /* sem rede ou sessão expirada: fica com o que já estava guardado */ }
+async function gcalDesconectar(){
+  const conta = gcalConfig().conta;
+  S.rotina.eventos = []; S.rotina.google = {};
+  salvar(); render();
+  try { await api('/api/desconectar', { method:'POST', body: JSON.stringify({ conta }) }); } catch(e){}
+  toast('Google Calendar desconectado');
 }
 
-function gcalDesconectar(){
-  gcalToken = null; gcalCliente = null;
-  S.rotina.eventos = [];
-  S.rotina.google = { clientId: gcalConfig().clientId || '', calendarId: '', calendarNome: '', sincronizadoEm: '' };
-  salvar(); render(); toast('Google Calendar desconectado');
+function erroGoogle(e){
+  const m = String((e && e.message) || e);
+  if (e && e.status === 401) return 'O Google revogou o acesso. Conecte de novo.';
+  if (e && e.status === 404) return 'Conta não encontrada. Conecte de novo.';
+  if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem internet';
+  if (/vari.veis de ambiente|sem configura/i.test(m)) return 'O servidor ainda não está configurado';
+  return 'Não deu para falar com o servidor';
 }
+
 
 /* ---- importação: Trello (.json do quadro) ---- */
 function parseTrello(dados){
@@ -1237,50 +1210,59 @@ function viewGoogleCard(){
   if (!gcalLigado()) {
     return `<div class="card">
       <span class="label">Google Calendar</span>
-      <p class="hint" style="margin:11px 0 0">O app lê sua agenda direto do Google — só leitura — e mantém a rotina em dia sozinho. Nada sai do seu aparelho.</p>
-      <input type="text" id="gclient" placeholder="Cole aqui o Client ID do Google" value="${esc(g.clientId || '')}" style="margin-top:12px" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <button class="btn primary wide" id="gconectar" style="margin-top:8px">Conectar com o Google</button>
-      <details style="margin-top:12px">
-        <summary class="hint" style="cursor:pointer">Como pegar o Client ID (uma vez só)</summary>
-        <ol class="hint" style="margin:9px 0 0;padding-left:20px;line-height:1.65">
-          <li>Abra <code>console.cloud.google.com</code> e crie um projeto.</li>
-          <li>Em <b>APIs e serviços → Biblioteca</b>, ative a <b>Google Calendar API</b>.</li>
-          <li>Em <b>Tela de permissão OAuth</b>, escolha <b>Externo</b>, preencha o nome e adicione seu e-mail em <b>Usuários de teste</b>.</li>
-          <li>Em <b>Credenciais → Criar credenciais → ID do cliente OAuth</b>, tipo <b>Aplicativo da Web</b>.</li>
-          <li>Em <b>Origens JavaScript autorizadas</b>, coloque <code>${esc(location.origin)}</code>.</li>
-          <li>Copie o Client ID e cole aqui em cima.</li>
-        </ol>
-      </details>
+      <p class="hint" style="margin:11px 0 0">Autorize uma vez e pronto. Sempre que você mexer na sua agenda, o Google avisa na hora e a rotina aqui muda sozinha — só leitura, o app nunca escreve nada na sua agenda.</p>
+      <button class="btn primary wide" id="gconectar" style="margin-top:14px">Conectar com o Google</button>
     </div>`;
   }
 
-  const quando = g.sincronizadoEm ? new Date(g.sincronizadoEm) : null;
+  if (!g.calendarId) {
+    return `<div class="card">
+      <span class="label">Google Calendar</span>
+      <p class="hint" style="margin:11px 0 0">Conta autorizada. Falta escolher qual agenda tem a sua rotina.</p>
+      <button class="btn primary wide" id="gtrocar" style="margin-top:12px">Escolher agenda</button>
+      <button class="btn danger wide" id="gsair" style="margin-top:8px">Desconectar</button>
+    </div>`;
+  }
+
+  const quando = g.atualizadoEm ? new Date(g.atualizadoEm) : null;
   const quandoTxt = quando && !isNaN(quando)
     ? quando.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
     : '—';
+  const aviso = g.webhook
+    ? '<p class="hint" style="margin:12px 0 0">Aviso instantâneo ligado: mexeu na agenda, muda aqui.</p>'
+    : `<p class="hint" style="margin:12px 0 0;color:var(--night)">O aviso instantâneo não pôde ser ligado${g.avisoWebhook ? ' (' + esc(String(g.avisoWebhook).slice(0,90)) + ')' : ''}. A rotina ainda atualiza sozinha, só não no mesmo segundo.</p>`;
+
   return `<div class="card">
     <div class="spread">
       <span class="label">Google Calendar</span>
       <span class="hint" style="color:var(--ember)">● conectado</span>
     </div>
-    <p class="hint" style="margin:11px 0 0">Agenda <b style="color:var(--sand)">${esc(g.calendarNome || g.calendarId)}</b> · ${(S.rotina.eventos||[]).length} eventos dos próximos ${GCAL_DIAS} dias · atualizado em ${esc(quandoTxt)}.</p>
+    <p class="hint" style="margin:11px 0 0">Agenda <b style="color:var(--sand)">${esc(g.calendarNome || g.calendarId)}</b> · ${(S.rotina.eventos||[]).length} eventos dos próximos 14 dias · atualizado em ${esc(quandoTxt)}.</p>
     <div class="rimport">
       <button class="btn" id="gatualizar">Atualizar agora</button>
       <button class="btn" id="gtrocar">Trocar agenda</button>
     </div>
     <button class="btn danger wide" id="gsair" style="margin-top:8px">Desconectar</button>
-    <p class="hint" style="margin:12px 0 0">A rotina se atualiza sozinha toda vez que você abre o app, e a cada 15 minutos com ele aberto.</p>
+    ${aviso}
   </div>`;
 }
 
-/* escolher a agenda depois de conectar */
-async function gcalEscolherAgenda(silencioso){
+/* escolher a agenda: o servidor grava a escolha e abre o canal de aviso */
+async function gcalEscolherAgenda(){
   const lista = await gcalAgendas();
   if (!lista.length) { toast('Nenhuma agenda encontrada'); return false; }
   const escolhida = lista.length === 1 ? lista[0] : await perguntarAgenda(lista);
   if (!escolhida) return false;
-  S.rotina.google = Object.assign({}, gcalConfig(), { calendarId: escolhida.id, calendarNome: escolhida.nome });
-  salvar();
+  const d = await api('/api/escolher', {
+    method: 'POST',
+    body: JSON.stringify({ conta: gcalConfig().conta, calendarId: escolhida.id, calendarNome: escolhida.nome })
+  });
+  S.rotina.google = Object.assign({}, gcalConfig(), {
+    calendarId: escolhida.id, calendarNome: escolhida.nome,
+    webhook: !!(d && d.webhook), avisoWebhook: (d && d.avisoWebhook) || ''
+  });
+  if (d && d.rotina) gcalGuardar(Object.assign({}, d.rotina, { calendarId: escolhida.id, calendarNome: escolhida.nome, webhook: !!d.webhook, avisoWebhook: d.avisoWebhook || '' }));
+  else salvar();
   return true;
 }
 
@@ -1330,50 +1312,29 @@ function bindRotina(v){
   };
 
   /* ---- Google Calendar ---- */
-  if (q('#gconectar')) q('#gconectar').onclick = async () => {
-    const id = q('#gclient').value.trim();
-    if (!id) { q('#gclient').focus(); return toast('Cole o Client ID primeiro'); }
-    if (!/\.apps\.googleusercontent\.com$/.test(id)) return toast('Esse não parece um Client ID do Google');
+  if (q('#gconectar')) q('#gconectar').onclick = () => {
     const btn = q('#gconectar');
-    btn.disabled = true; btn.textContent = 'Conectando…';
-    S.rotina.google = Object.assign({}, gcalConfig(), { clientId: id });
-    try {
-      if (await gcalEscolherAgenda()) {
-        await gcalSincronizar(true);
-        render(); toast('Google Calendar conectado');
-      } else { btn.disabled = false; btn.textContent = 'Conectar com o Google'; }
-    } catch(e) {
-      btn.disabled = false; btn.textContent = 'Conectar com o Google';
-      toast(erroGoogle(e));
-    }
+    btn.disabled = true; btn.textContent = 'Abrindo o Google…';
+    gcalConectar();
   };
 
   if (q('#gatualizar')) q('#gatualizar').onclick = async () => {
     const btn = q('#gatualizar');
     btn.disabled = true; btn.textContent = 'Atualizando…';
-    try { await gcalSincronizar(false); render(); toast('Rotina atualizada'); }
+    try { await gcalSincronizar(true); render(); toast('Rotina atualizada'); }
     catch(e){ btn.disabled = false; btn.textContent = 'Atualizar agora'; toast(erroGoogle(e)); }
   };
 
   if (q('#gtrocar')) q('#gtrocar').onclick = async () => {
     try {
-      if (await gcalEscolherAgenda()) { await gcalSincronizar(false); render(); toast('Agenda trocada'); }
+      if (await gcalEscolherAgenda()) { render(); toast('Agenda escolhida'); }
     } catch(e){ toast(erroGoogle(e)); }
   };
 
   if (q('#gsair')) q('#gsair').onclick = () => {
-    if (!confirm('Desconectar do Google Calendar? Os eventos importados saem da rotina; seus blocos fixos ficam.')) return;
+    if (!confirm('Desconectar do Google Calendar? Os eventos da agenda saem da rotina e o servidor apaga sua autorização. Seus blocos fixos ficam.')) return;
     gcalDesconectar();
   };
-}
-
-function erroGoogle(e){
-  const m = String((e && e.message) || e);
-  if (/cancelad|popup_closed|access_denied/i.test(m)) return 'Login cancelado';
-  if (/sem rede|Failed to fetch|NetworkError/i.test(m)) return 'Sem internet';
-  if (/sem permiss/i.test(m)) return 'O Google recusou o acesso. Confira o Client ID e os usuários de teste.';
-  if (/idpiframe|invalid_client|origin/i.test(m)) return 'Client ID não aceita este endereço. Confira as origens autorizadas.';
-  return 'Não deu para falar com o Google';
 }
 
 /* lê o arquivo e troca a rotina pela importada */
@@ -2020,7 +1981,10 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b
     if (!S.rotina || typeof S.rotina !== 'object') S.rotina = {};
     if (!Array.isArray(S.rotina.blocos)) S.rotina.blocos = [];
     if (!Array.isArray(S.rotina.eventos)) S.rotina.eventos = [];
-    if (!S.rotina.google || typeof S.rotina.google !== 'object') S.rotina.google = { clientId:'', calendarId:'', calendarNome:'', sincronizadoEm:'' };
+    if (!S.rotina.google || typeof S.rotina.google !== 'object') S.rotina.google = {};
+    /* a versão que lia o Google direto do navegador guardava um Client ID e
+       nenhuma conta no servidor. Não serve mais: começa desconectado. */
+    if (S.rotina.google.clientId && !S.rotina.google.conta) { S.rotina.google = {}; S.rotina.eventos = []; }
     /* a importação por arquivo do .ics achatava a agenda inteira numa semana e
        enchia a rotina de lixo. Quem importou assim começa limpo. */
     if (S.rotina.origem === 'ics') { S.rotina.blocos = []; S.rotina.origem = ''; S.rotina.importadoEm = ''; }
@@ -2029,17 +1993,21 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b
   diaVisto = diaClamp();
   render();
 
+  /* voltando da autorização do Google, a chave da conta vem no # */
+  await gcalLerRetorno();
+
   /* o banner da tela inicial acompanha o relógio sozinho */
   setInterval(atualizarAgora, 30000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     atualizarAgora();
-    gcalSincronizarQuieto();          /* voltou pro app: confere a agenda */
+    gcalSincronizarQuieto();          /* voltou pro app: confere na hora */
   });
 
-  /* a rotina se atualiza sozinha: ao abrir e a cada 15 min com o app aberto */
+  /* O webhook mantém o servidor sempre em dia. Aqui a gente só pergunta
+     "mudou?" — resposta vazia quando não mudou, então pode ser de perto. */
   gcalSincronizarQuieto();
-  setInterval(gcalSincronizarQuieto, 15 * 60 * 1000);
+  setInterval(gcalSincronizarQuieto, GCAL_PING);
 })();
 </script>
 </body>
