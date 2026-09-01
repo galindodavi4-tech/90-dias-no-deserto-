@@ -2,10 +2,38 @@
    Guardamos tudo no Redis (Upstash) via REST, que funciona em qualquer runtime
    serverless só com duas variáveis de ambiente. */
 
-/* A Upstash cria variáveis com nomes diferentes dependendo de como o banco foi
-   ligado na Vercel. Aceitamos os dois para ninguém precisar renomear nada. */
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
+/* A Vercel deixa escolher um prefixo na hora de ligar o banco, então os nomes
+   das variáveis mudam de instalação para instalação. Em vez de exigir um nome
+   certo, a gente procura: primeiro os nomes conhecidos, depois qualquer par
+   URL/TOKEN cujo endereço seja da Upstash. Assim funciona com prefixo nenhum,
+   com STORAGE_, com KV_ — com o que for. */
+function acharBanco(){
+  const env = process.env;
+  const conhecidos = [
+    ['KV_REST_API_URL', 'KV_REST_API_TOKEN'],
+    ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'],
+    ['REDIS_REST_URL', 'REDIS_REST_TOKEN']
+  ];
+  for (const [u, t] of conhecidos) {
+    if (env[u] && env[t]) return { url: env[u], token: env[t], via: u };
+  }
+  for (const chave of Object.keys(env)) {
+    const valor = env[chave];
+    if (typeof valor !== 'string' || !/^https:\/\/[^\s/]*upstash\.io/i.test(valor)) continue;
+    const irmas = [
+      chave.replace(/URL$/i, 'TOKEN'),
+      chave.replace(/_?URL$/i, '') + '_REST_API_TOKEN',
+      chave.replace(/_?URL$/i, '') + '_TOKEN'
+    ];
+    for (const t of irmas) {
+      if (env[t]) return { url: valor, token: env[t], via: chave };
+    }
+  }
+  return { url: '', token: '', via: '' };
+}
+const BANCO = acharBanco();
+const KV_URL = BANCO.url;
+const KV_TOKEN = BANCO.token;
 
 export const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 export const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
