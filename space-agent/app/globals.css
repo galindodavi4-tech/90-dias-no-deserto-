@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/*
+ * Design system "Turquesa" — derivado do kit de UI escuro com cartões em relevo
+ * suave. A cor principal (antes índigo/violeta) virou turquesa; o pêssego/coral
+ * continua como acento quente e o lavanda entra como terceira cor de dados.
+ */
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+
+  /* Fundo e superfícies */
+  --color-bg: #061a1f;
+  --color-bg-deep: #04121a;
+  --color-surface: #0e3038;
+  --color-surface-2: #12404a;
+  --color-surface-3: #175560;
+  --color-line: #2a6f78;
+
+  /* Primária: turquesa */
+  --color-primary-200: #a8f5ec;
+  --color-primary-300: #6eeadf;
+  --color-primary: #2ee6d6;
+  --color-primary-600: #14b8a6;
+  --color-primary-700: #0f8f86;
+
+  /* Acentos do kit original */
+  --color-peach: #ffc29a;
+  --color-coral: #f47b6b;
+  --color-lavender: #a99bff;
+
+  /* Texto */
+  --color-ink: #e8fbf9;
+  --color-ink-muted: #8fbcb8;
+  --color-ink-faint: #5d8d8a;
+
+  /* Estados */
+  --color-danger: #ff4d5e;
+  --color-success: #3ef0a8;
+
+  --radius-card: 1.75rem;
+  --radius-control: 0.9rem;
+
+  --shadow-card: 0 24px 48px -12px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --shadow-raised: 0 10px 20px -6px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-glow: 0 0 0 1px rgb(46 230 214 / 0.35), 0 8px 28px -6px rgb(46 230 214 / 0.55);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgb(46 230 214 / 0.12), transparent 60%),
+      radial-gradient(900px 500px at 110% 110%, rgb(169 155 255 / 0.1), transparent 60%),
+      var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: rgb(46 230 214 / 0.35);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Cartão: gradiente de cima para baixo + sombra profunda, cantos bem redondos */
+  .ds-card {
+    border-radius: var(--radius-card);
+    background: linear-gradient(160deg, var(--color-surface-2), var(--color-surface) 70%);
+    box-shadow: var(--shadow-card);
+  }
+  /* Controle em relevo (botões de ícone, trilhos) */
+  .ds-raised {
+    border-radius: var(--radius-control);
+    background: linear-gradient(160deg, var(--color-surface-3), var(--color-surface-2));
+    box-shadow: var(--shadow-raised);
+  }
+  .ds-gradient-primary {
+    background: linear-gradient(90deg, var(--color-primary-300), var(--color-primary-600));
+  }
+  .ds-gradient-warm {
+    background: linear-gradient(90deg, var(--color-peach), var(--color-coral));
+  }
+  .ds-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+  .ds-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-3) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
